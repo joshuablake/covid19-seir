@@ -1,7 +1,0 @@
-{
-    "python.pythonPath": "/home/sanmitra/anaconda3/envs/vbode/bin/python",
-    "files.associations": {
-        "random": "cpp",
-        "cmath": "cpp"
-    }
-}
