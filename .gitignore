@@ -1,7 +1,7 @@
 *.*~
-.vscode
+.vscode/
 *.pyc
 __pycache__
-results
-figures
-old_code
+results/
+figures/
+old_code/
