@@ -6,7 +6,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pickle
 from models.logPDF_Cpp import LogPosteriorRegionWise
-from models.forwardModel_Cpp import ForwardModelRegionWise
+from models.forwardModel_vecage import ForwardModelRegionWise
 from mcmc.adaptiveMetropolis import AdaptiveMetropolis
 from mcmc.block_mcmc import MCMC
 from contact_m.generate_contact_matrices import breakpoint, daily_mixing_matrices
@@ -19,7 +19,7 @@ from multiprocessing import Pool
 from util.util import ParallelEvaluator
 TEST_ENABLED = False
 
-num_cores = 1#multiprocessing.cpu_count()-1
+num_cores = 4#multiprocessing.cpu_count()-1
 
 def mcmc_runner(RUN_REGION):
         #######################################################################################
@@ -120,13 +120,15 @@ def mcmc_runner(RUN_REGION):
         X0 = np.hstack(start)
         sampler = AdaptiveMetropolis(logP, mean_est=X0, cov_est=None, tune_interval = 1)
  
-        MCMCsampler = MCMC(sampler, logP, X0, 500) 
+        MCMCsampler = MCMC(sampler, logP, X0, 5000) 
         return MCMCsampler.run()       
 
-
+"""
 traces = []
 for i in range(7):
         traces.append(mcmc_runner(i))
+"""
+traces = Parallel(n_jobs=num_cores)(delayed(mcmc_runner)(region) for region in range(7))
 param_filename = './results/_mcmc_test_allregions_par.p'
 pickle.dump(traces, open(param_filename, 'wb'))
 """
