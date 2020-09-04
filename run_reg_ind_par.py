@@ -19,7 +19,7 @@ from multiprocessing import Pool
 from util.util import ParallelEvaluator
 TEST_ENABLED = False
 
-num_cores = multiprocessing.cpu_count()
+num_cores = 4#multiprocessing.cpu_count()-1
 
 def mcmc_runner(RUN_REGION):
         #######################################################################################
