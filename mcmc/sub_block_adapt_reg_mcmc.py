@@ -64,7 +64,7 @@ class subBlockRegionalAMGS(object):
         def ParallelLogP(thr,glob,local):
             local_glob = np.hstack((glob,local[thr,:]))
             return self._target[thr](local_glob,joint_reg=True)
-        num_cores = multiprocessing.cpu_count()-4
+        num_cores = multiprocessing.cpu_count()
         print(num_cores)
         for i in range(self._iterations):
             j = int(np.random.choice(self.region_starts,1))
@@ -84,15 +84,6 @@ class subBlockRegionalAMGS(object):
 
             
             if i==0:
-                """
-                current_log_target = 0.0
-                # reshape all the regional parameters as N_regions X regional dimension
-                alloldreg_current = current[self._global_size:].reshape((self._sub_blocks,self._regional_size))
-                # Now evaluate logP of each regional model with same global but different regional parameters
-                for r in range(len(self._target)):
-                    eacholdreg_oldglob_current = np.hstack((current[:self._global_size],alloldreg_current[r,:]))
-                    current_log_target += self._target[r](eacholdreg_oldglob_current,joint_reg=True)
-                """
                 alloldreg_current = current[self._global_size:].reshape((self._sub_blocks,self._regional_size))
                 current_log_targets = Parallel(n_jobs=num_cores)(
                     delayed(ParallelLogP)(thread,current[:self._global_size],
@@ -141,7 +132,7 @@ class subBlockRegionalAMGS(object):
             chain[i,:] = current 
 
             # Print-outs
-            if self._verbose and ((i % 500 == 0) or (i==self._iterations-1)):
+            if self._verbose and ((i % 5000 == 0) or (i==self._iterations-1)):
                 print('Iteration ' + str(i) + ' of ' + str(self._iterations))
                 print('  Acceptance rate: ' + str(acceptance))
 

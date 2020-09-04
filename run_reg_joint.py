@@ -110,7 +110,7 @@ X0 = np.hstack(start)
 #############    RUN AMGS regionwise independent MCMC SAMPLER    ######################
 #######################################################################################
 t0 = timer.time()
-MCMCsampler = subBlockRegionalAMGS(regional_logPs, X0, X0, 10000)
+MCMCsampler = subBlockRegionalAMGS(regional_logPs, X0, X0, 500000)
 trace = MCMCsampler.run()       
 t1 = timer.time()
 total = t1-t0
