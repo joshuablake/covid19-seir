@@ -120,7 +120,7 @@ def mcmc_runner(RUN_REGION):
         X0 = np.hstack(start)
         sampler = AdaptiveMetropolis(logP, mean_est=X0, cov_est=None, tune_interval = 1)
  
-        MCMCsampler = MCMC(sampler, logP, X0, 100000) 
+        MCMCsampler = MCMC(sampler, logP, X0, 300000) 
         return MCMCsampler.run()       
 
 

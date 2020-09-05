@@ -32,7 +32,7 @@ class subBlockRegionalAMGS(object):
         self._mean_est = []
         for l in self.loop_iterator:
             self._mean_est.append(np.hstack((mean_est[:self._global_size],\
-                mean_est[l:l+self._regional_size]))) 
+            mean_est[l:l+self._regional_size]))) 
 
         self._cov_est = []
         for num_cov in range(self._sub_blocks):
@@ -57,7 +57,7 @@ class subBlockRegionalAMGS(object):
 
         # Chain of stored samples
 
-        chain = np.zeros((self._iterations,d))
+        chain = np.zeros((self._iterations, d))
 
         # Initial acceptance rate 
         acceptance = 0

@@ -76,7 +76,7 @@ class LogPosteriorRegionWise(object):#pints.LogPDF
         ## Now the priors ####
 
         # infectious_period 
-        logPrior_dI = stats.gamma.logpdf(dI, a = 1.43, scale = 1/0.549)# add 1.43,
+        logPrior_dI = stats.gamma.logpdf(dI+2., a = 1.43, scale = 1/0.549)# add 1.43,
         # sero sensitivity
         logPrior_ksens = stats.beta.logpdf(ksens, 23.5, 9.5)
         # sero specificity
