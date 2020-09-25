@@ -6,7 +6,7 @@ import numpy as np
 class MCMC(object):
     
     _verbose=True
-    def __init__(self, sampler, target, x0, iterations=150000):
+    def __init__(self, sampler, target, x0, iterations=None):
 
         self._target = target
         # Total number of iterations

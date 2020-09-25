@@ -6,7 +6,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pickle
 from models.logPDF_Cpp import LogPosteriorRegionWise
-from models.forwardModel_Cpp import ForwardModelRegionWise
+from models.forwardModel_vecage import ForwardModelRegionWise
 from mcmc.adaptiveMetropolis import AdaptiveMetropolis
 from mcmc.block_mcmc import MCMC
 from contact_m.generate_contact_matrices import breakpoint, daily_mixing_matrices

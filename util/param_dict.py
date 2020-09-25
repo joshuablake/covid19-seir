@@ -5,11 +5,11 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 
-def give_param_names(ind=True):
+def give_param_names(ind=False):
     if ind:
-        param_names_dict = {'psir':[r"$\spi_{r1}$",r"$\spi_{r2}$",r"$\spi_{r3}$",\
-        r"$\spi_{r4}$",r"$\spi_{r5}$",r"$\spi_{r6}$",r"$\spi_{r7}$",4], \
-            'I0':[r"$Io_{r1}$",r"$Io_{r2}$",r"$Io_{r2}$",r"$Io_{r3}$",\
+        param_names_dict = {'psir':[r"$\psi_{r1}$",r"$\psi_{r2}$",r"$\psi_{r3}$",\
+        r"$\psi_{r4}$",r"$\psi_{r5}$",r"$\psi_{r6}$",r"$\psi_{r7}$",4], \
+            'I0':[r"$Io_{r1}$",r"$Io_{r2}$",r"$Io_{r3}$",\
         r"$Io_{r4}$",r"$Io_{r5}$",r"$Io_{r6}$",r"$Io_{r7}$",5] ,\
 
             'm_mul1':[r"$m_{1r1}$",r"$m_{1r2}$",r"$m_{1r3}$",\
@@ -51,18 +51,17 @@ def give_param_names(ind=True):
             r"$\beta_{15r4}$",r"$\beta_{15r5}$",r"$\beta_{15r6}$",r"$\beta_{15r7}$",31],
         'beta16':[r"$\beta_{16r1}$",r"$\beta_{16r2}$",r"$\beta_{16r3}$",\
             r"$\beta_{16r4}$",r"$\beta_{16r5}$",r"$\beta_{16r6}$",r"$\beta_{16r7}$",32],
-        'beta17':[r"$\beta_{17r1}$",r"$\beta_{17r2}$",r"$\beta_{17r3}$",\
-            r"$\beta_{17r4}$",r"$\beta_{17r5}$",r"$\beta_{17r6}$",r"$\beta_{17r7}$",33],
-        'global_scalars': [r"$dI$", r"$k_{sn}$", r"$k_{sp}$", r"$\eta$"], \
+
+        'global_scalars': [r"$dI$", r"$k_{sn}$", r"$k_{sp}$", r"$\eta$", r"$\beta_{sd}$", (0,1,2,3,13)], \
         'p_dead':  [r"$p_{a1}$",r"$p_{a2}$",r"$p_{a3}$",\
-            r"$p_{a4}$",r"$p_{a5}$",r"$p_{a6}$",r"$p_{a7}$"]
+            r"$p_{a4}$",r"$p_{a5}$",r"$p_{a6}$",r"$p_{a7}$",(np.arange(6,13))]
         }
     else:
         
-        param_names_dict = {'psir':[r"$\spi_{r1}$",r"$\spi_{r2}$",r"$\spi_{r3}$",\
-        r"$\spi_{r4}$",r"$\spi_{r5}$",r"$\spi_{r6}$",r"$\spi_{r7}$",4], \
-            'I0':[r"$Io_{r1}$",r"$Io_{r2}$",r"$Io_{r2}$",r"$Io_{r3}$",\
-        r"$Io_{r4}$",r"$Io_{r5}$",r"$Io_{r6}$",r"$Io_{r7}$",5] ,\
+        param_names_dict = {'psir':[r"$\psi_{r1}$",r"$\psi_{r2}$",r"$\psi_{r3}$",\
+        r"$\psi_{r4}$",r"$\psi_{r5}$",r"$\psi_{r6}$",r"$\psi_{r7}$",12], \
+            'I0':[r"$Io_{r1}$",r"$Io_{r2}$",r"$Io_{r3}$",\
+        r"$Io_{r4}$",r"$Io_{r5}$",r"$Io_{r6}$",r"$Io_{r7}$",13] ,\
 
             'm_mul1':[r"$m_{1r1}$",r"$m_{1r2}$",r"$m_{1r3}$",\
         r"$m_{1r4}$",r"$m_{1r5}$",r"$m_{1r6}$",r"$m_{1r7}$", 14], \
@@ -103,10 +102,8 @@ def give_param_names(ind=True):
             r"$\beta_{15r4}$",r"$\beta_{15r5}$",r"$\beta_{15r6}$",r"$\beta_{15r7}$",31],
         'beta16':[r"$\beta_{16r1}$",r"$\beta_{16r2}$",r"$\beta_{16r3}$",\
             r"$\beta_{16r4}$",r"$\beta_{16r5}$",r"$\beta_{16r6}$",r"$\beta_{16r7}$",32],
-        'beta17':[r"$\beta_{17r1}$",r"$\beta_{17r2}$",r"$\beta_{17r3}$",\
-            r"$\beta_{17r4}$",r"$\beta_{17r5}$",r"$\beta_{17r6}$",r"$\beta_{17r7}$",33],
-        'global_scalars': [r"$dI$", r"$k_{sn}$", r"$k_{sp}$", r"$\eta$"], \
+        'global_scalars': [r"$dI$", r"$k_{sn}$", r"$k_{sp}$", r"$\eta$", r"$\beta_{sd}$", (0,1,2,3,11)], \
         'p_dead':  [r"$p_{a1}$",r"$p_{a2}$",r"$p_{a3}$",\
-            r"$p_{a4}$",r"$p_{a5}$",r"$p_{a6}$",r"$p_{a7}$"]
+            r"$p_{a4}$",r"$p_{a5}$",r"$p_{a6}$",r"$p_{a7}$",(np.arange(4,11))]
         }
     return param_names_dict

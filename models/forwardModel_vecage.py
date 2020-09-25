@@ -28,7 +28,8 @@ class ForwardModelRegionWise(object):
         self._lockdn_breakpoint = lockdn_breakpoint
         self._breakpoints_list = breakpoints_list
         self._dayindex = dayindex
-    
+        self._real_data = False
+
         def conv_cdfs(dt, MaxConv_dead):
             mean = (4.0 + 15.0)
             sd = np.sqrt(1.41**2 + 12.1**2)
@@ -44,6 +45,9 @@ class ForwardModelRegionWise(object):
         self.cdf_dead = conv_cdfs(self._dt, self._MaxConv_dead)
         self._mixing_matrix = mixing_matrix
 
+    def real_data(self):
+        self._real_data = True
+        
     def init_transmission(self, dI, psir, ngen_M0, I0):
         dt = self._dt
         A = self._A
@@ -89,7 +93,7 @@ class ForwardModelRegionWise(object):
         return (1 - pr)*dt
 
 
-    def transmission(self, dI, psir, mix_mat, m_mul, I0, beta, tlock):
+    def transmission(self, dI, psir, mix_mat, m_mul, I0, beta, tlock, get_R = False):
         sigma = 2./self._dL
         gamma = 2./dI
         dt = self._dt
@@ -122,7 +126,7 @@ class ForwardModelRegionWise(object):
         i2 = np.zeros((T,A))
         e1 = np.zeros((T,A))
         e2 = np.zeros((T,A))
-        
+        Rt = np.zeros((T))
         
         
         i1[0,:], i2[0,:], e1[0,:], e2[0,:], r[0,:], s[0,:], r0_init \
@@ -138,6 +142,10 @@ class ForwardModelRegionWise(object):
                 
                 s[i,:] = s[i-1,:]*(1 - lamda[i-1,:])
                 e1[i,:] = e1[i-1,:]*(1- sigma*dt) + s[i-1,:]*lamda[i-1,:]
+                if get_R:
+                    scaled_Lambda = s[i,:]*(mix_mat[:,:,i]*m_prelock)*dI
+                    r_star_t = np.sort(abs(np.linalg.eigvals(scaled_Lambda)))[-1]
+                    Rt[i] = r0_init*(r_star_t/r0star)
             else:
                 lamda[i-1,:] = self.hazard_func(beta[i-1], \
                                             mix_mat[:,:,i-1]*m_postlock, \
@@ -145,12 +153,19 @@ class ForwardModelRegionWise(object):
                                             r0_init, gamma)
                 s[i,:] = s[i-1,:]*(1 - lamda[i-1,:])
                 e1[i,:] = e1[i-1,:]*(1- sigma*dt) + s[i-1,:]*lamda[i-1,:]
+                if get_R:
+                    scaled_Lambda = s[i,:]*(mix_mat[:,:,i]*m_postlock)*dI
+                    r_star_t = np.sort(abs(np.linalg.eigvals(scaled_Lambda)))[-1]
+                    Rt[i] = r0_init*(r_star_t/r0star)          
         
             e2[i,:] = e2[i-1,:]*(1- sigma*dt) + e1[i-1,:]*sigma*dt
             i1[i,:] = i1[i-1,:]*(1- gamma*dt) + e2[i-1,:]*sigma*dt
             i2[i,:] = i2[i-1,:]*(1- gamma*dt) + i1[i-1,:]*gamma*dt
-            r[i,:] =  r[i-1,:] + i2[i-1,:]*gamma*dt  
-        return s, lamda
+            r[i,:] =  r[i-1,:] + i2[i-1,:]*gamma*dt 
+        if get_R:
+            return s, lamda, Rt
+        else:
+            return s, lamda
 
     def convolution(self, S, lamda, p_dead):
         T = self._T
@@ -169,7 +184,10 @@ class ForwardModelRegionWise(object):
         conv_series_kids_summed = np.zeros((T,A-1))
 
         cdf_dead = np.tile(cdf_dead.reshape((-1,1)),(1,A))
-        conv_series = signal.convolve(delta, cdf_dead, mode='full', method='fft')[:334,-8:]
+        if self._real_data:
+            conv_series = signal.convolve(delta, cdf_dead, mode='full', method='fft')[:332,-8:]
+        else:
+            conv_series = signal.convolve(delta, cdf_dead, mode='full', method='fft')[:334,-8:]#change to 332 for real data
         conv_series_kids_summed[:,0] = conv_series[:,0] + conv_series[:,1]
         conv_series_kids_summed[:,1:] = conv_series[:,2:]  
         for a in range(A-1):
@@ -178,6 +196,7 @@ class ForwardModelRegionWise(object):
         return conv_series_kids_summed
 
     def daily_betas(self, beta):
+        assert len(beta) == 17
         dt = self._dt
         seventh_breakpoint = self._seventh_breakpoint 
         breakpoints_list = self._breakpoints_list 
@@ -194,15 +213,20 @@ class ForwardModelRegionWise(object):
         assert len(dayindex) == beta_mat.shape[0]
         return beta_mat
 
-    def simulate(self, _dI, _psir, _beta_rw, _I0, _p_dead, _m_mul, test=False): 
-        
+    def simulate(self, _dI, _psir, _beta_rw, _I0, _p_dead, _m_mul, test=False, get_R = False): 
+               
         ### Solve the SEEIIR ODE using Euler regionwise
         _dI = _dI + 2.0
         daily_beta_rw = self.daily_betas(_beta_rw)
         daily_mix_matrix = self._mixing_matrix
+        if not get_R:
+            s, lamda= self.transmission(_dI, _psir, daily_mix_matrix, _m_mul, 
+                                _I0, daily_beta_rw, self._lockdn_breakpoint)   
+        else:
+            _, _, Rt = self.transmission(_dI, _psir, daily_mix_matrix, _m_mul, 
+                                _I0, daily_beta_rw, self._lockdn_breakpoint, True) 
+            return Rt
 
-        s, lamda= self.transmission(_dI, _psir, daily_mix_matrix, _m_mul, 
-                                _I0, daily_beta_rw, self._lockdn_breakpoint)            
         expected_deaths = self.convolution(s, lamda, _p_dead).reshape((s.shape[0],self._A - 1))        
         return expected_deaths, s
 

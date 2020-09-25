@@ -2,12 +2,7 @@ import scipy.stats as stats
 import numpy as np
 
 
-class AdaptiveMetropolis(object):
-    '''
-    Plain Adaptive Metropolis by Haario et al
-    adapt_scale=False uses estimated covariance * "optimal scaling"
-    adapt_scale=True adapts scaling to reach "optimal acceptance rate"
-    '''
+class AdaptiveMetropolis(object): 
     def __init__(self, target, mean_est=None, cov_est=None, tune_interval = None):
 
         self.method ='AM'

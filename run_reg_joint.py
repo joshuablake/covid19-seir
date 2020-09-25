@@ -8,7 +8,7 @@ import pickle
 from models.logPDF_Cpp import LogPosteriorRegionWise
 from models.forwardModel_vecage import ForwardModelRegionWise
 from mcmc.adaptiveMetropolis import AdaptiveMetropolis
-from mcmc.sub_block_adapt_reg_mcmc import subBlockRegionalAMGS
+from mcmc.sub_block_adapt_mcmc import SubBlockRegionalAMGS
 from contact_m.generate_contact_matrices import breakpoint, daily_mixing_matrices
 import scipy.stats as stats
 import pandas as pd
@@ -46,8 +46,8 @@ daily_mix_matrix = daily_mixing_matrices(dt, idx_d, list_brk_mix, regions)
 death_data = np.zeros((int(len(time)/2),A-1,regions))
 sero_data = np.zeros((152,A,regions))
 for i in range(regions):
-        death_data[:,:,i] = np.loadtxt('./data/deaths_r'+str(i)+'.txt')
-        sero_data[:,:,i] = np.loadtxt('./data/sero_assay_r'+str(i)+'.txt')
+        death_data[:,:,i] = np.loadtxt('./data/deaths_1_r'+str(i)+'.txt')
+        sero_data[:,:,i] = np.loadtxt('./data/sero_assay_1_r'+str(i)+'.txt')
 
 data = [death_data, sero_data]
 regions_names = ["East_of_England",
@@ -75,10 +75,10 @@ for reg_model in range(regions):
 #######################################################################################
 ########################    DEFINE starting PARAMETERS    #############################
 #######################################################################################
-dI = [ 0.5033387]
+dI = [0.5033387]
 ksens = [0.7078755]
 kspec = [0.9650125]
-eta = [0.0672998]
+eta = [0.5]
 psir = np.array([0.281224110810985,0.246300679874443, 0.230259384150778, 
         0.307383663711624, 0.249492140587071, 0.224509782739688, 0.234528728809235])
 I0 = np.array([-16.7064769395683, -14.3327333035582,
@@ -103,18 +103,18 @@ for region in range(regions):
         start.append(psir[region])
         start.append(I0[region])
         start.append(m_mul[:,region])
-        start.append(beta_rw[:,region])
+        start.append(beta_rw[1:,region])
 
 X0 = np.hstack(start)
 #######################################################################################
 #############    RUN AMGS regionwise independent MCMC SAMPLER    ######################
 #######################################################################################
 t0 = timer.time()
-MCMCsampler = subBlockRegionalAMGS(regional_logPs, X0, X0, 500000)
+MCMCsampler = SubBlockRegionalAMGS(regional_logPs, X0, X0, 250000)
 trace = MCMCsampler.run()       
 t1 = timer.time()
 total = t1-t0
 print('Time for SubBlock all regions AMGS is: ',total)
-param_filename = './results/_mcmc_test_allregions.p'
+param_filename = './results/_mcmc_test_joint_twohalfmil.p'
 pickle.dump(trace, open(param_filename, 'wb'))
 

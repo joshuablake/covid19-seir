@@ -3,5 +3,7 @@
 *.pyc
 **/__pycache__/
 results/
+mcmc/backup_files/
+data/real_data/
 figures/
 old_code/
