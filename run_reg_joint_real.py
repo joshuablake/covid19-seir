@@ -6,7 +6,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pickle
 from models.logPDF_Cpp import LogPosteriorRegionWise
-from models.forwardModel_vecage import ForwardModelRegionWise
+from models.forwardModel_Cpp import ForwardModelRegionWise
 from mcmc.adaptiveMetropolis import AdaptiveMetropolis
 from mcmc.sub_block_adapt_mcmc import SubBlockRegionalAMGS
 from contact_m.generate_contact_matrices import breakpoint, daily_mixing_matrices
@@ -124,11 +124,11 @@ X0 = np.hstack(start)
 #############    RUN AMGS regionwise independent MCMC SAMPLER    ######################
 #######################################################################################
 t0 = timer.time()
-MCMCsampler = SubBlockRegionalAMGS(regional_logPs, X0, X0, 500000)
+MCMCsampler = SubBlockRegionalAMGS(regional_logPs, X0, X0, 1000000)
 trace = MCMCsampler.run()       
 t1 = timer.time()
 total = t1-t0
 print('Time for SubBlock all regions AMGS is: ',total)
-param_filename = './results/_mcmc_test_joint_real_gamcorprhalfmil.p'
+param_filename = './results/_mcmc_test_joint_real_cppmil.p'
 pickle.dump(trace, open(param_filename, 'wb'))
 

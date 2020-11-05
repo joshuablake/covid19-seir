@@ -28,18 +28,19 @@ def plot_function(_trace, _burnin, _thin, _T_lines, _param_names, _ind, fig_name
 
       # Add trace subplot
       plt.subplot(7, 2, 2 + 2 * i)
-      plt.ylabel(p, fontsize=20)  
+      plt.ylabel(p, fontsize=20) 
+      
       plt.plot(plot_full_trace[:, i], alpha=0.5, color='lightseagreen')
       plt.axhline(_T_lines[i], linewidth=2.5, color='red')
   plt.subplots_adjust(wspace = 0.35, hspace=0.5)
-  plt.savefig('./figures/joint/real/'+fig_name+'two.png')
+  plt.savefig('./figures/joint/real/'+fig_name+'cpp.png')
   plt.close()
 
 regions = 7
-burnin = -250000#500000
-thin = 250#500
+burnin = -500000
+thin = 500#500
 param_name_dict = give_param_names()
-param_filename = './results/_mcmc_test_joint_real_gamcorprhalfmil.p'
+param_filename = './results/_mcmc_test_joint_real_cppmil.p'
 trace = pickle.load( open( param_filename , "rb" ) )
 
 Paul_chain = pd.read_csv("./results/chain_sanmitra.csv")

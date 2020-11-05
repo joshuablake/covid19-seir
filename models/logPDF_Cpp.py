@@ -150,8 +150,7 @@ class LogPosteriorRegionWise(object):#pints.LogPDF
         dI = global_parameters[0]
         ksens, kspec, eta = global_parameters[1:4]
         p_dead = global_parameters[4:11]
-        beta_rw_sd = global_parameters[11]
-                
+        beta_rw_sd = global_parameters[11]                
 
         # infectious_period 
         logPrior_dI = stats.gamma.logpdf(dI, a = 1.43, scale = 1/0.549)# add 1.43,

@@ -6,7 +6,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pickle
 from models.logPDF_Cpp import LogPosteriorRegionWise
-from models.forwardModel_vecage import ForwardModelRegionWise
+from models.forwardModel_Cpp import ForwardModelRegionWise
 from mcmc.adaptiveMetropolis import AdaptiveMetropolis
 from mcmc.block_mcmc import MCMC
 from contact_m.generate_contact_matrices import breakpoint, daily_mixing_matrices
@@ -31,11 +31,11 @@ I0 = Paul_chain.as_matrix(columns=Paul_chain.columns[30:30+7])
 
 burnin = -200000
 thin = 200
-param_filename = './results/_mcmc_test_joint_real_gamcorprhalfmil.p'
+param_filename = './results/_mcmc_test_joint_real_cpphalfmil.p'
 trace = pickle.load( open( param_filename , "rb" ) )
 trace_post_burn = trace[burnin:,:]
 py_thinned_trace_amgs = trace_post_burn[::thin,:]
-#np.savetxt('./results/Sanmitra_chain.csv', py_thinned_trace_amgs,delimiter=",",newline='\r\n')
+np.savetxt('./results/Sanmitra_chain.csv', py_thinned_trace_amgs,delimiter=",",newline='\r\n')
 #pd.write_csv('./results/Sanmitra_chain.csv', py_thinned_trace_amgs)
 #######################################################################################
 ####################      DEFINE CONSTANTS     ########################################
@@ -125,7 +125,8 @@ for RUN_REGION in range(regions):
         ppc_paul = []
         rand_range = random.sample(range(0, 1000), 500)
         for i in rand_range:
-                ppc_paul.append(logP(true_param[i,:],True))
+                ppc_paul.append(logP(true_param[i,:],True) + \
+                        logP.global_priors(true_param[i,:12]))
         ppc_paul_ar = np.array(ppc_paul)
 
         trace_regional = py_thinned_trace_amgs[:, region_starts[RUN_REGION]:region_starts[RUN_REGION]+21]
@@ -135,15 +136,16 @@ for RUN_REGION in range(regions):
         ppc_sanmitra = []
         rand_range = random.sample(range(0, 1000), 500)
         for i in rand_range:
-                ppc_sanmitra.append(logP(trace_ppc[i,:],True))
+                ppc_sanmitra.append(logP(trace_ppc[i,:],True) + \
+                        logP.global_priors(true_param[i,:12]))
         ppc_sanmitra_ar = np.array(ppc_sanmitra)
-        plt.hist(ppc_sanmitra_ar,20,color='blue', label='Sanmitra')
-        plt.hist(ppc_paul_ar,20,color='red', label='Paul')
+        plt.hist(ppc_sanmitra_ar,20,alpha=0.5,color='blue', label='Sanmitra')
+        plt.hist(ppc_paul_ar,20,alpha=0.5,color='red', label='Paul')
 
         plt.legend()
         plt.xlabel('LogP', fontsize=20)
         plt.ylabel('R_'+str(RUN_REGION), fontsize=20)
-        plt.savefig('./figures/joint/ppc_real/'+str(RUN_REGION)+'logp.png')
+        plt.savefig('./figures/joint/ppc_real/'+str(RUN_REGION)+'CPP_logp.png')
         plt.close()
         print('Done region :'+str(RUN_REGION))
 

@@ -19,21 +19,21 @@ cpp_args = ['-std=c++11']
 
 ext_modules = [
     Extension(
-    'lvssa',
-        ['LVSSA.cpp'],
+    'seeiir_ode',
+        ['seeiir_ode.cpp'],
         include_dirs=[get_pybind_include(), 
         get_pybind_include(user=True),
-	"/home/sanmitra/eigen3"],
+	"/scratch/sanmitra/test_sanmitra/eigen3"],
     language='c++',
     extra_compile_args = cpp_args,
     ),
 ]
 
 setup(
-    name='Gillespie SSA',
+    name='SEEIIR System',
     version='0.0.1',
     author='sanmitra ghosh',
     author_email='sanmitra.ghosh@mrc-bsu.cam.ac.uk',
-    description='ICUH',
+    description='SEEIIR_ODE',
     ext_modules=ext_modules,
 )

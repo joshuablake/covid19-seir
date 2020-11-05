@@ -6,7 +6,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pickle
 from models.logPDF_Cpp import LogPosteriorRegionWise
-from models.forwardModel_vecage import ForwardModelRegionWise
+from models.forwardModel_Cpp import ForwardModelRegionWise
 from mcmc.adaptiveMetropolis import AdaptiveMetropolis
 from mcmc.block_mcmc import MCMC
 from contact_m.generate_contact_matrices import breakpoint, daily_mixing_matrices
@@ -82,7 +82,7 @@ data = [death_data_kids, sero_data]
 
 burnin = -200000
 thin = 200
-param_filename = './results/_mcmc_test_joint_real_gamcorprhalfmil.p'
+param_filename = './results/_mcmc_test_joint_real_cpphalfmil.p'
 trace = pickle.load( open( param_filename , "rb" ) )
 trace_post_burn = trace[burnin:,:]
 py_thinned_trace_amgs = trace_post_burn[::thin,:]
