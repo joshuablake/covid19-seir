@@ -119,7 +119,7 @@ py::array_t<double> cdf_dead, int conlen){
       {
         double conv_temp = 0.0;
         int range = std::min(conlen,n);
-        for(int k=0; k<range; k++)
+        for(int k=0; k<=range; k++)
             conv_temp += delta_(n-k,a)*cdf_dead_(k);
         conv_series_(n,a) = conv_temp;
       }

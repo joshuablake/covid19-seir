@@ -37,10 +37,10 @@ def plot_function(_trace, _burnin, _thin, _T_lines, _param_names, _ind, fig_name
   plt.close()
 
 regions = 7
-burnin = -500000
-thin = 500#500
+burnin = 100000
+thin = 100#500
 param_name_dict = give_param_names()
-param_filename = './results/_mcmc_test_joint_real_cppmil.p'
+param_filename = './results/_mcmc_test_joint_real_200k.p'
 trace = pickle.load( open( param_filename , "rb" ) )
 
 Paul_chain = pd.read_csv("./results/chain_sanmitra.csv")

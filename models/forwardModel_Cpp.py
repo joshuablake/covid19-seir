@@ -38,7 +38,7 @@ class ForwardModelRegionWise(object):
             cdfs_dead = np.zeros(MaxConv_dead)
             for n in range(MaxConv_dead-1):
                 cdfs_dead[n] = (delay_rv_dead.cdf((n+1)*dt)-delay_rv_dead.cdf((n)*dt))
-            cdfs_dead[MaxConv_dead-1] = 1-delay_rv_dead.cdf(MaxConv_dead-1*dt)
+            cdfs_dead[MaxConv_dead-1] = 1-delay_rv_dead.cdf((MaxConv_dead-1)*dt)
             return cdfs_dead
 
         self.cdf_dead = conv_cdfs(self._dt, self._MaxConv_dead)
@@ -144,18 +144,25 @@ class ForwardModelRegionWise(object):
         delta = NNI
         con_len = len(cdf_dead)-1
         conv_series = np.zeros((T,A))
-        conv_series_kids_summed = np.zeros((T,A-1))
         """
         cdf_dead = np.tile(cdf_dead.reshape((-1,1)),(1,A))
         conv_series = signal.convolve(delta, cdf_dead, mode='full', method='fft')[:334,-8:]
         """
         seeiir_ode.convolution_2D(delta, conv_series, cdf_dead, con_len)
-        conv_series_kids_summed[:,0] = conv_series[:,0] + conv_series[:,1]
-        conv_series_kids_summed[:,1:] = conv_series[:,2:]  
-        for a in range(A-1):
-            conv_series_kids_summed[:,a] = conv_series_kids_summed[:,a]*p_dead[a]
-        
-        return conv_series_kids_summed
+        """       
+        for n in range(T):
+            conv_temp = np.zeros(A)
+            for k in range(min(con_len,n)+1):
+                conv_temp += delta[n-k,:]*cdf_dead[k]
+            conv_series[n,:] = conv_temp
+        """ 
+        p = np.zeros(8)
+        p[0] = p_dead[0]
+        p[1:] = p_dead
+        for a in range(A):
+            conv_series[:,a] = conv_series[:,a]*p[a]
+     
+        return conv_series
 
     def daily_betas(self, beta):
         dt = self._dt
@@ -183,7 +190,7 @@ class ForwardModelRegionWise(object):
 
         s, lamda= self.transmission(_dI, _psir, daily_mix_matrix, _m_mul, 
                                 _I0, daily_beta_rw, self._lockdn_breakpoint)            
-        expected_deaths = self.convolution(s, lamda, _p_dead).reshape((s.shape[0],self._A - 1))        
+        expected_deaths = self.convolution(s, lamda, _p_dead).reshape((s.shape[0],self._A))        
         return expected_deaths, s
 
     def test(self):

@@ -1,6 +1,7 @@
 import numpy as np
 import scipy
 import scipy.stats as stats
+import scipy.special as special
 # import pints
 
 class LogPosteriorRegionWise(object):#pints.LogPDF
@@ -22,13 +23,32 @@ class LogPosteriorRegionWise(object):#pints.LogPDF
         self._transform = False
 
     def death_lik(self, ag_mu_death, eta, sample = False):
-        
-        r = ag_mu_death/eta
-        prob = (r/(r+ag_mu_death))
         if sample:
-            return stats.nbinom(n=r, p=prob).rvs()
+            return stats.nbinom(n=r, p=1-prob).rvs()
         else:
-            return np.sum(stats.nbinom.logpmf(self.death_data, n=r, p=prob ))
+            if np.any(ag_mu_death<0):
+                return -np.inf
+            else:
+                lfx = 0.0
+                #r = ag_mu_death/eta
+                #prob = 1 - (1/(eta+1))
+                for i in range(len(ag_mu_death)):
+                    for j in range(8):
+                        mu = ag_mu_death[i,j]
+                        x = self.death_data[i,j]
+                        if((mu == 0) & (x == 0)):
+                            lfx += 0.
+                        elif ((mu == 0) & (x != 0)):
+                            lfx += -np.inf
+                        else:
+                            if (eta > 1.5e-08):
+                                r = mu / eta
+                                lfx += special.loggamma(x + r) - special.loggamma(r)
+                                p = 1 - (1 / (eta + 1))
+                                lfx += ((r * np.log(1 - p)) + (x * np.log(p)))
+                            else:
+                                lfx += (x * np.log(mu)) - mu
+                return lfx
 
     def sero_lik(self, S, ksens, kspec, sample = False):
 
@@ -49,6 +69,7 @@ class LogPosteriorRegionWise(object):#pints.LogPDF
             ksens, kspec, eta = parameters[1:4]
             psir, I0, p_dead  = parameters[4], parameters[5], parameters[6:13]
             beta_rw_sd = parameters[13]
+            print(ksens)
             
         else:
             dI = parameters[0]
@@ -77,7 +98,7 @@ class LogPosteriorRegionWise(object):#pints.LogPDF
         assert first_beta == 0
         log_rw_lik = np.sum(stats.norm.logpdf(beta_rw[1:],0.0,beta_rw_sd))
 
-        log_likelihood = log_death_lik + log_sero_lik + log_rw_lik
+        log_likelihood =  log_death_lik #+ log_sero_lik #+ log_rw_lik
 
         ## Now the priors ####
         # exponential_growth_rate
@@ -88,7 +109,7 @@ class LogPosteriorRegionWise(object):#pints.LogPDF
         logPrior_m_mul = np.sum(stats.norm.logpdf(m_mul,-0.1115718, 0.4723807)) 
         
         log_prior = logPrior_psir + logPrior_I0 + logPrior_m_mul 
-        return log_likelihood + log_prior
+        return log_likelihood #+ log_prior
     
     def sample(self, parameters, joint_reg=False):
         assert len(parameters) == self.n_params        
