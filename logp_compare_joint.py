@@ -7,6 +7,10 @@ import matplotlib.pyplot as plt
 import pickle
 from models.logPDF_Cpp import LogPosteriorRegionWise
 from models.forwardModel_Cpp import ForwardModelRegionWise
+
+from models.logPDF_Cpp_sde import LogPosteriorRegionWise as LogPosteriorRegionWiseSde
+from models.forwardModel_Cpp_sde import ForwardModelRegionWise as ForwardModelRegionWiseSde
+
 from mcmc.adaptiveMetropolis import AdaptiveMetropolis
 from mcmc.block_mcmc import MCMC
 from contact_m.generate_contact_matrices import breakpoint, daily_mixing_matrices
@@ -29,9 +33,9 @@ psir = Paul_chain.as_matrix(columns=Paul_chain.columns[23:23+7])
 I0 = Paul_chain.as_matrix(columns=Paul_chain.columns[30:30+7])
 
 
-burnin = -96000
-thin = 16
-param_filename = './results/_mcmc_test_joint_real_200k.p'
+burnin = -50000#96000
+thin = 50#16
+param_filename = './results/_mcmc_test_joint_real_sde10_400k2.p'
 trace = pickle.load( open( param_filename , "rb" ) )
 trace_post_burn = trace[burnin:,:]
 py_thinned_trace_amgs = trace_post_burn[::thin,:]
@@ -105,16 +109,23 @@ data = [death_data_int, sero_data_int]
 
 
 x_axis = pd.date_range('2020-02-17', '2020-08-01', freq='D')
-region_starts = [12 + (i*21) for i in range(regions)]
+region_starts = [12 + (i*15) for i in range(regions)]
 
 PPC_REG=[]                     
 for RUN_REGION in range(regions):
  
+        forward_model_sde = ForwardModelRegionWiseSde(dt, time, A, N[:,RUN_REGION], daily_mix_matrix, \
+                        breakpoints[6], breakpoints[5], list_brk_beta, idx_d)
+        forward_model_sde.real_data()
+        logP_sde = LogPosteriorRegionWiseSde(forward_model_sde, RUN_REGION, 
+        data, sero_denom[:,:,RUN_REGION])
+
         forward_model = ForwardModelRegionWise(dt, time, A, N[:,RUN_REGION], daily_mix_matrix, \
                         breakpoints[6], breakpoints[5], list_brk_beta, idx_d)
         forward_model.real_data()
         logP = LogPosteriorRegionWise(forward_model, RUN_REGION, 
         data, sero_denom[:,:,RUN_REGION])
+
         psir_I0 = np.hstack((psir[:,RUN_REGION][:,None], I0[:,RUN_REGION][:,None]))
         true_param = np.hstack((dI[:1000,:],ksens[:1000,:], kspec[:1000,:], eta[:1000,:],\
         p_dead[:1000,:],beta_rw_sd[:1000,:], psir_I0[:1000,:], \
@@ -134,14 +145,14 @@ for RUN_REGION in range(regions):
         ppc_paul_ar = np.array(ppc_paul)
         PPC_REG.append(ppc_paul_ar)
 
-        trace_regional = py_thinned_trace_amgs[:, region_starts[RUN_REGION]:region_starts[RUN_REGION]+21]
+        trace_regional = py_thinned_trace_amgs[:, region_starts[RUN_REGION]:region_starts[RUN_REGION]+15]
         trace_global = py_thinned_trace_amgs[:,:12]
         trace_ppc = np.concatenate((trace_global,trace_regional),axis=1)
 
         ppc_sanmitra = []
         rand_range = random.sample(range(0, 1000), 500)
         for i in rand_range:
-                ppc_sanmitra.append(logP(trace_ppc[i,:],True))#+                         logP.global_priors(trace_ppc[i,:12]))
+                ppc_sanmitra.append(logP_sde(trace_ppc[i,:],True))#+                         logP.global_priors(trace_ppc[i,:12]))
         ppc_sanmitra_ar = np.array(ppc_sanmitra)
         plt.hist(ppc_sanmitra_ar,20,alpha=0.5,color='blue', label='Sanmitra')
         plt.hist(ppc_paul_ar,20,alpha=0.5,color='red', label='Paul')

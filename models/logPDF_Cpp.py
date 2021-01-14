@@ -98,7 +98,7 @@ class LogPosteriorRegionWise(object):#pints.LogPDF
         assert first_beta == 0
         log_rw_lik = np.sum(stats.norm.logpdf(beta_rw[1:],0.0,beta_rw_sd))
 
-        log_likelihood =  log_death_lik #+ log_sero_lik #+ log_rw_lik
+        log_likelihood =  log_death_lik + log_sero_lik# + log_rw_lik
 
         ## Now the priors ####
         # exponential_growth_rate

@@ -11,8 +11,8 @@ def global_priors(global_parameters):
     #assert len(global_parameters) == self.n_params_global
     dI = global_parameters[0]
     ksens, kspec, eta = global_parameters[1:4]
-    p_dead = global_parameters[4:11]
-    beta_rw_sd = global_parameters[11]                
+    p_dead = global_parameters[4:11]  
+    beta_rw_sd =  global_parameters[11]             
 
     # infectious_period 
     logPrior_dI = stats.gamma.logpdf(dI, a = 1.43, scale = 1/0.549)# add 1.43,
@@ -47,7 +47,7 @@ class SubBlockRegionalAMGS(object):
         self._regions = int(7)
         self._sub_blocks = int(2)
         self._global_size = int(12)
-        self._regional_size = int(21)
+        self._regional_size = int(15)
 
         # This iterator churns out start index of each regional block of parameters
         self.loop_iterator = \
@@ -106,127 +106,128 @@ class SubBlockRegionalAMGS(object):
             return self._target[thr](local_glob,joint_reg=True)
         num_cores = multiprocessing.cpu_count()
         print('Using total threads: ', num_cores)
-        #with Parallel(n_jobs=num_cores) as parallel:
-        for i in range(self._iterations):
-            for s in range(self._sub_blocks):                
-                # Copy the current whole parameter vector
-                proposed = current.copy()
-                if s == 0:
-                    # Update one region's parameters
-                    j = int(np.random.choice(self.region_starts,1))
-                    pos_j = list(self.region_starts).index(j)                    
-                    oneoldreg = current[j:(j+self._regional_size)]
-                    onenewreg = np.random.multivariate_normal(oneoldreg, \
-                                np.exp(self.regionalscale[pos_j]) * \
-                                    self._reg_cov_est[pos_j])
+        with Parallel(n_jobs=num_cores) as parallel:
+            for i in range(self._iterations):
+                for s in range(self._sub_blocks):                
+                    # Copy the current whole parameter vector
+                    proposed = current.copy()
+                    if s == 0:
+                        # Update one region's parameters
+                        j = int(np.random.choice(self.region_starts,1))
+                        pos_j = list(self.region_starts).index(j)                    
+                        oneoldreg = current[j:(j+self._regional_size)]
+                        onenewreg = np.random.multivariate_normal(oneoldreg, \
+                                    np.exp(self.regionalscale[pos_j]) * \
+                                        self._reg_cov_est[pos_j])
 
-                    proposed[j:j+self._regional_size] = onenewreg
-                elif s == 1:
-                    # Update global parameters                   
-                    oldglob = current[:self._global_size]
-                    newglob = np.random.multivariate_normal(oldglob, \
-                                np.exp(self.globalscale) * \
-                                    self._glob_cov_est)
+                        proposed[j:j+self._regional_size] = onenewreg
+                    elif s == 1:
+                        # Update global parameters                   
+                        oldglob = current[:self._global_size]
+                        newglob = np.random.multivariate_normal(oldglob, \
+                                    np.exp(self.globalscale) * \
+                                        self._glob_cov_est)
 
-                    proposed[:self._global_size] = newglob                         
+                        proposed[:self._global_size] = newglob                         
 
-                # Evaluate the logP if first iteration of the chain            
-                if i==0:
-                    allreg_current = current[self._global_size:].reshape((self._regions,\
-                        self._regional_size))
-                    """
-                    current_log_targets = parallel(
-                        delayed(ParallelLogP)(thread,current[:self._global_size],
-                        allreg_current) for thread in range(self._regions))
-                    current_log_target = np.sum(current_log_targets) + \
-                    self._target[0].global_priors(current[:self._global_size])
-                    """
-                    current_log_target = 0
-                    for r in range(self._regions):
-                        current_log_target += ParallelLogP(r,current[:self._global_size],
-                        allreg_current)
-                    #current_log_target += self._target[0].global_priors(current[:self._global_size])
-                    current_log_target += global_priors(current[:self._global_size])
-                # Evaluate the logP of the proposed
-                allreg_proposed = proposed[self._global_size:].reshape((self._regions,\
-                    self._regional_size))
-                """
-                proposed_log_targets = parallel(
-                    delayed(ParallelLogP)(thread,proposed[:self._global_size],
-                    allreg_proposed) for thread in range(self._regions))
-                proposed_log_target = np.sum(proposed_log_targets) + \
-                    self._target[0].global_priors(proposed[:self._global_size])
-                """
-                proposed_log_target = 0
-                for r in range(self._regions):
-                    proposed_log_target += ParallelLogP(r,proposed[:self._global_size],
-                allreg_proposed)
-                #proposed_log_target += self._target[0].global_priors(proposed[:self._global_size])
-                proposed_log_target += global_priors(proposed[:self._global_size])
-                # Routine MH step
-                log_ratio = proposed_log_target - current_log_target
-                log_ratio = min(np.log(1), log_ratio)
-
-                if s==1:
-                    accepted_glob = 0
-                elif s==0:
-                    accepted_reg = 0
-                if np.isfinite(proposed_log_target):
-                    if log_ratio > np.log(np.random.rand(1)):
-                        if s==1:
-                            accepted_glob = 1
-                        elif s==0:
-                            accepted_reg = 1
-                        current = proposed
-                        current_log_target = proposed_log_target  
-
-                # Free the current's copy
-                proposed = None     
-            
-                # Update acceptance rates
-                if s==1:
-                    acceptance_glob = (i * acceptance_glob + float(accepted_glob)) / (i + 1) 
-                elif s==0:
-                    acceptance_reg = (i * acceptance_reg + float(accepted_reg)) / (i + 1)
-
-            # Start the adaptations
-            if i > 199:
-                learning_rate = (i - 199 + 1.0) ** -0.6
-
-                # Adapt proposal scales
-                self.globalscale += learning_rate * (accepted_glob - 0.234)  
-                self.regionalscale[pos_j] += learning_rate * (accepted_reg - 0.234) 
-
-                # Etch out the current's global and regional components
-                glob_current_block = current[:self._global_size]
-                reg_current_block = current[j:j+self._regional_size] 
-
-                # Etch out the changes for global and regional components
-                glob_difference = glob_current_block - self._glob_mean_est
-                reg_difference = reg_current_block - self._reg_mean_est[pos_j]
-
-                # Adapt proposal means
-                self._glob_mean_est = (1-learning_rate) * self._glob_mean_est + \
-                    learning_rate*glob_current_block
-                self._reg_mean_est[pos_j] = (1-learning_rate) * self._reg_mean_est[pos_j] + \
-                    learning_rate*reg_current_block
-
-                # Adapt proposal covariances
-                self._glob_cov_est = (1-learning_rate) * self._glob_cov_est + \
-                    learning_rate*(np.outer(glob_difference, glob_difference))
-                self._reg_cov_est[pos_j] = (1-learning_rate) * self._reg_cov_est[pos_j] + \
-                    learning_rate*(np.outer(reg_difference, reg_difference))
+                    # Evaluate the logP if first iteration of the chain            
+                    if i==0:
+                        allreg_current = current[self._global_size:].reshape((self._regions,\
+                            self._regional_size))
                         
-            # Store the current
-            chain[i,:] = current 
+                        current_log_targets = parallel(
+                            delayed(ParallelLogP)(thread,current[:self._global_size],
+                            allreg_current) for thread in range(self._regions))
+                        current_log_target = np.sum(current_log_targets) + \
+                            global_priors(current[:self._global_size])
+                        
+                        """
+                        current_log_target = 0
+                        for r in range(self._regions):
+                            current_log_target += ParallelLogP(r,current[:self._global_size],
+                            allreg_current)
+                        current_log_target += global_priors(current[:self._global_size])
+                        """
+                    # Evaluate the logP of the proposed
+                    allreg_proposed = proposed[self._global_size:].reshape((self._regions,\
+                        self._regional_size))
+                
+                    proposed_log_targets = parallel(
+                        delayed(ParallelLogP)(thread,proposed[:self._global_size],
+                        allreg_proposed) for thread in range(self._regions))
+                    proposed_log_target = np.sum(proposed_log_targets) + \
+                        global_priors(proposed[:self._global_size])
+                    """
+                    proposed_log_target = 0
+                    for r in range(self._regions):
+                        proposed_log_target += ParallelLogP(r,proposed[:self._global_size],
+                    allreg_proposed)
+                    proposed_log_target += global_priors(proposed[:self._global_size])
+                    """
+                    # Routine MH step
+                    log_ratio = proposed_log_target - current_log_target
+                    log_ratio = min(np.log(1), log_ratio)
 
-            # Print-outs
-            if self._verbose and ((i % 2000 == 0) or (i==self._iterations-1)):
-                print('Iteration ' + str(i) + ' of ' + str(self._iterations))
-                print('Global  Acceptance rate: ' + str(acceptance_glob))
-                print('Regional  Acceptance rate: ' + str(acceptance_reg))
+                    if s==1:
+                        accepted_glob = 0
+                    elif s==0:
+                        accepted_reg = 0
+                    if np.isfinite(proposed_log_target):
+                        if log_ratio > np.log(np.random.rand(1)):
+                            if s==1:
+                                accepted_glob = 1
+                            elif s==0:
+                                accepted_reg = 1
+                            current = proposed
+                            current_log_target = proposed_log_target  
 
-        return chain
+                    # Free the current's copy
+                    proposed = None     
+                
+                    # Update acceptance rates
+                    if s==1:
+                        acceptance_glob = (i * acceptance_glob + float(accepted_glob)) / (i + 1) 
+                    elif s==0:
+                        acceptance_reg = (i * acceptance_reg + float(accepted_reg)) / (i + 1)
+
+                # Start the adaptations
+                if i > 199:
+                    learning_rate = (i - 199 + 1.0) ** -0.6
+
+                    # Adapt proposal scales
+                    self.globalscale += learning_rate * (accepted_glob - 0.234)  
+                    self.regionalscale[pos_j] += learning_rate * (accepted_reg - 0.234) 
+
+                    # Etch out the current's global and regional components
+                    glob_current_block = current[:self._global_size]
+                    reg_current_block = current[j:j+self._regional_size] 
+
+                    # Etch out the changes for global and regional components
+                    glob_difference = glob_current_block - self._glob_mean_est
+                    reg_difference = reg_current_block - self._reg_mean_est[pos_j]
+
+                    # Adapt proposal means
+                    self._glob_mean_est = (1-learning_rate) * self._glob_mean_est + \
+                        learning_rate*glob_current_block
+                    self._reg_mean_est[pos_j] = (1-learning_rate) * self._reg_mean_est[pos_j] + \
+                        learning_rate*reg_current_block
+
+                    # Adapt proposal covariances
+                    self._glob_cov_est = (1-learning_rate) * self._glob_cov_est + \
+                        learning_rate*(np.outer(glob_difference, glob_difference))
+                    self._reg_cov_est[pos_j] = (1-learning_rate) * self._reg_cov_est[pos_j] + \
+                        learning_rate*(np.outer(reg_difference, reg_difference))
+                            
+                # Store the current
+                chain[i,:] = current 
+
+                # Print-outs
+                if self._verbose and ((i % 2000 == 0) or (i==self._iterations-1)):
+                    print('Iteration ' + str(i) + ' of ' + str(self._iterations))
+                    print('Global  Acceptance rate: ' + str(acceptance_glob))
+                    print('Regional  Acceptance rate: ' + str(acceptance_reg))
+
+            return chain
     
     def run(self):
         return self._run_independent()

@@ -33,14 +33,14 @@ def plot_function(_trace, _burnin, _thin, _T_lines, _param_names, _ind, fig_name
       plt.plot(plot_full_trace[:, i], alpha=0.5, color='lightseagreen')
       plt.axhline(_T_lines[i], linewidth=2.5, color='red')
   plt.subplots_adjust(wspace = 0.35, hspace=0.5)
-  plt.savefig('./figures/joint/real/'+fig_name+'cpp.png')
+  plt.savefig('./figures/joint/real/'+fig_name+'_sde.png')
   plt.close()
 
 regions = 7
 burnin = 100000
 thin = 100#500
 param_name_dict = give_param_names()
-param_filename = './results/_mcmc_test_joint_real_200k.p'
+param_filename = './results/_mcmc_test_joint_real_sde_200k.p'
 trace = pickle.load( open( param_filename , "rb" ) )
 
 Paul_chain = pd.read_csv("./results/chain_sanmitra.csv")
@@ -72,7 +72,7 @@ for i in range(3):
 #### plot betas ###################
 beta_rw = p_beta_rw
 beta_rw = np.array(np.split(beta_rw,regions, axis=0)).T 
-for i in range(16):
+for i in range(5):
   T_lines =  beta_rw[i,:] 
   param_names = param_name_dict['beta'+str(i+1)][:-1]
   ind = ([param_name_dict['beta'+str(i+1)][-1] + (r*21) for r in range(regions)])
