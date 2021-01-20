@@ -22,11 +22,26 @@ ext_modules = [
     'seeiir_ode',
         ['seeiir_ode.cpp'],
         include_dirs=[get_pybind_include(), 
-        get_pybind_include(user=True),
-	"/scratch/sanmitra/test_sanmitra/eigen3"],
+        get_pybind_include(user=True)],
     language='c++',
     extra_compile_args = cpp_args,
     ),
+    Extension(
+    'daily_betas',
+        ['ou_stochastic_beta.cpp'],
+        include_dirs=[get_pybind_include(), 
+        get_pybind_include(user=True)],
+    language='c++',
+    extra_compile_args = cpp_args,
+    ),
+    Extension(
+    'death_lik',
+        ['likelihoods.cpp'],
+        include_dirs=[get_pybind_include(), 
+        get_pybind_include(user=True)],
+    language='c++',
+    extra_compile_args = cpp_args,
+    )    
 ]
 
 setup(

@@ -36,6 +36,7 @@ N = np.array([74103, 318183, 804260, 704025, 1634429, 1697206, 683583, 577399,
 idx_w = pd.date_range('2020-02-17 00:00:00', '2020-08-01 12:00:00', freq='W-TUE')
 idx_d = pd.date_range('2020-02-17 00:00:00', '2020-08-01 12:00:00', freq='12H')
 ts_d = pd.Series(range(len(idx_d)), index=idx_d)
+a= breakpoint(ts_d, idx_d, idx_w)
 breakpoints = np.array(breakpoint(ts_d, idx_d, idx_w)[1])
 list_brk_beta = [breakpoints[5],breakpoints[-3], breakpoints[-1]]
 list_brk_mix = [breakpoints[5],*breakpoints[-2:]]

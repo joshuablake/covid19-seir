@@ -14,7 +14,6 @@ class LogPosteriorRegionWise(object):#pints.LogPDF
         self.sero_denom = sero_denom
         self.sero_length = 152
         
-        #self._N = pop_size_N
         self._testing = testing
 
         self.n_params = 33

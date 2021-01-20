@@ -1,17 +1,12 @@
 //#include <boost/math/distributions/negative_binomial.hpp>
 #include <iostream>
 #include <vector>
-#include <unordered_set>
-#include <algorithm>
-#include <string>
 #include <stdio.h>      /* printf */
 #include <math.h>       /* lgamma */
 #include <random>
-#include <Eigen/Dense>
 #include <pybind11/pybind11.h>
 #include <pybind11/numpy.h>
 #include <pybind11/stl.h>
-#include <pybind11/eigen.h>
 #include <cmath>
 namespace py = pybind11;
 

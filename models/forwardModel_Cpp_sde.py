@@ -4,10 +4,8 @@ from scipy.integrate import odeint
 import scipy.stats as stats
 import scipy.signal as signal
 from .CPP import seeiir_ode
-class DoubleWellFourier(object):
-    def __init__(self, T, y0=None):
-        self._y0 = float(y0)
-        self._T = float(T)        
+from .CPP import daily_betas
+ 
 
 
 class ForwardModelRegionWise(object):
@@ -185,7 +183,7 @@ class ForwardModelRegionWise(object):
         values = odeint(rhs, 0.0, times, (parameters,))
         return values
         
-    def daily_betas(self, beta):
+    def daily_betass(self, beta):
         dt = self._dt
         seventh_breakpoint = self._seventh_breakpoint 
         breakpoints_list = self._breakpoints_list 
@@ -213,7 +211,11 @@ class ForwardModelRegionWise(object):
         
         ### Solve the SEEIIR ODE using Euler regionwise
         _dI = _dI + 2.0
-        daily_beta_rw = self.daily_betas(_beta_rw)
+        #daily_beta_rw = self.daily_betass(_beta_rw)
+        #test_beta = _beta_rw[:,None].reshape((-1,))
+        daily_beta_rw = np.array(daily_betas.DailyBrownianBetas(_beta_rw, 17, self._seventh_breakpoint, \
+            self._breakpoints_list[2], self._breakpoints_list[1], 2))
+        
         daily_mix_matrix = self._mixing_matrix
 
         s, lamda= self.transmission(_dI, _psir, daily_mix_matrix, _m_mul, 

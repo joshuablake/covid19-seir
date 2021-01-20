@@ -7,37 +7,6 @@ from joblib import Parallel, delayed
 import multiprocessing
 import time as timer
 
-def global_priors(global_parameters):
-    #assert len(global_parameters) == self.n_params_global
-    dI = global_parameters[0]
-    ksens, kspec, eta = global_parameters[1:4]
-    p_dead = global_parameters[4:11]  
-    beta_rw_sd =  global_parameters[11]             
-
-    # infectious_period 
-    logPrior_dI = stats.gamma.logpdf(dI, a = 1.43, scale = 1/0.549)# add 1.43,
-    # sero sensitivity
-    logPrior_ksens = stats.beta.logpdf(ksens, 23.5, 9.5)# 23.5, 9.5
-    # sero specificity
-    logPrior_kspec = stats.beta.logpdf(kspec, 569.5, 5.5) #569.5, 5.5
-    # negbin_overdispersion
-    logPrior_eta = stats.gamma.logpdf(eta, a = 1.0, scale = 1/0.2)# rate parameterisation 
-
-    # prop_of_death (IFR)
-    p_dead_loc = np.array([1., 1., 1., 1., 1., 1., 9.5])
-    p_dead_scale = np.array([62110.801242236, 23363.4859813084, \
-        5290.00529100529, 1107.64745011086, 120.951219512195, \
-        31.1543408360129, 112.])
-    
-    logPrior_p_dead = np.sum(stats.beta.logpdf(p_dead, p_dead_loc, p_dead_scale))        
-    # random-walk sd
-    logPrior_beta_rw_sd = stats.gamma.logpdf(beta_rw_sd, a = 1.0, scale = 1/100)#WIP was 1/100
-    #logPrior_beta_rw_sd = stats.invgamma.logpdf(beta_rw_sd,a=5.0,scale=5.0)                             
-
-    logGlobPrior = logPrior_dI + logPrior_ksens + logPrior_kspec + \
-        logPrior_eta + logPrior_p_dead + logPrior_beta_rw_sd    
-    return logGlobPrior
-
 class SubBlockRegionalAMGS(object):
     def __init__(self, target, x0, mean_est, iterations=150000):
 
@@ -81,6 +50,37 @@ class SubBlockRegionalAMGS(object):
             
         self._j = 12
 
+    def global_priors(self, global_parameters):
+        #assert len(global_parameters) == self.n_params_global
+        dI = global_parameters[0]
+        ksens, kspec, eta = global_parameters[1:4]
+        p_dead = global_parameters[4:11]  
+        beta_rw_sd =  global_parameters[11]             
+
+        # infectious_period 
+        logPrior_dI = stats.gamma.logpdf(dI, a = 1.43, scale = 1/0.549)# add 1.43,
+        # sero sensitivity
+        logPrior_ksens = stats.beta.logpdf(ksens, 23.5, 9.5)# 23.5, 9.5
+        # sero specificity
+        logPrior_kspec = stats.beta.logpdf(kspec, 569.5, 5.5) #569.5, 5.5
+        # negbin_overdispersion
+        logPrior_eta = stats.gamma.logpdf(eta, a = 1.0, scale = 1/0.2)# rate parameterisation 
+
+        # prop_of_death (IFR)
+        p_dead_loc = np.array([1., 1., 1., 1., 1., 1., 9.5])
+        p_dead_scale = np.array([62110.801242236, 23363.4859813084, \
+            5290.00529100529, 1107.64745011086, 120.951219512195, \
+            31.1543408360129, 112.])
+        
+        logPrior_p_dead = np.sum(stats.beta.logpdf(p_dead, p_dead_loc, p_dead_scale))        
+        # random-walk sd
+        logPrior_beta_rw_sd = stats.gamma.logpdf(beta_rw_sd, a = 1.0, scale = 1/100)#WIP was 1/100
+        #logPrior_beta_rw_sd = stats.invgamma.logpdf(beta_rw_sd,a=5.0,scale=5.0)                             
+
+        logGlobPrior = logPrior_dI + logPrior_ksens + logPrior_kspec + \
+            logPrior_eta + logPrior_p_dead + logPrior_beta_rw_sd    
+        return logGlobPrior
+        
     def _run_independent(self):
         # Report the current settings
         if self._verbose:
@@ -139,7 +139,7 @@ class SubBlockRegionalAMGS(object):
                             delayed(ParallelLogP)(thread,current[:self._global_size],
                             allreg_current) for thread in range(self._regions))
                         current_log_target = np.sum(current_log_targets) + \
-                            global_priors(current[:self._global_size])
+                            self.global_priors(current[:self._global_size])
                         
                         """
                         current_log_target = 0
@@ -156,7 +156,7 @@ class SubBlockRegionalAMGS(object):
                         delayed(ParallelLogP)(thread,proposed[:self._global_size],
                         allreg_proposed) for thread in range(self._regions))
                     proposed_log_target = np.sum(proposed_log_targets) + \
-                        global_priors(proposed[:self._global_size])
+                        self.global_priors(proposed[:self._global_size])
                     """
                     proposed_log_target = 0
                     for r in range(self._regions):
@@ -222,7 +222,7 @@ class SubBlockRegionalAMGS(object):
                 chain[i,:] = current 
 
                 # Print-outs
-                if self._verbose and ((i % 2000 == 0) or (i==self._iterations-1)):
+                if self._verbose and ((i % 100 == 0) or (i==self._iterations-1)):
                     print('Iteration ' + str(i) + ' of ' + str(self._iterations))
                     print('Global  Acceptance rate: ' + str(acceptance_glob))
                     print('Regional  Acceptance rate: ' + str(acceptance_reg))
