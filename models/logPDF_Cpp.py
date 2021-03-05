@@ -2,9 +2,9 @@ import numpy as np
 import scipy
 import scipy.stats as stats
 import scipy.special as special
-# import pints
+from .CPP import death_lik
 
-class LogPosteriorRegionWise(object):#pints.LogPDF
+class LogPosteriorRegionWise(object):
 
     def __init__(self, forward_model, which_region, data, sero_denom, testing = False):
 
@@ -21,7 +21,7 @@ class LogPosteriorRegionWise(object):#pints.LogPDF
         self.n_params_regional = 21
         self._transform = False
 
-    def death_lik(self, ag_mu_death, eta, sample = False):
+    def death_lik1(self, ag_mu_death, eta, sample = False):
         if sample:
             return stats.nbinom(n=r, p=1-prob).rvs()
         else:
@@ -48,6 +48,17 @@ class LogPosteriorRegionWise(object):#pints.LogPDF
                             else:
                                 lfx += (x * np.log(mu)) - mu
                 return lfx
+    def death_lik(self, ag_mu_death, eta, sample = False):      
+        if sample:
+            r = ag_mu_death/(eta)
+            prob = (r/(r+ag_mu_death))
+            return stats.nbinom(n=r, p=prob).rvs()
+        else:
+            if np.any(ag_mu_death<0):
+                return -np.inf
+            else:
+                #return np.sum(stats.nbinom.logpmf(self.death_data, n=r, p=prob ))
+                return death_lik.NegBinomial_LogLikelihood(self.death_data, ag_mu_death, eta)
 
     def sero_lik(self, S, ksens, kspec, sample = False):
 
@@ -97,7 +108,7 @@ class LogPosteriorRegionWise(object):#pints.LogPDF
         assert first_beta == 0
         log_rw_lik = np.sum(stats.norm.logpdf(beta_rw[1:],0.0,beta_rw_sd))
 
-        log_likelihood =  log_death_lik + log_sero_lik# + log_rw_lik
+        log_likelihood =  log_death_lik + log_sero_lik + log_rw_lik
 
         ## Now the priors ####
         # exponential_growth_rate
@@ -108,38 +119,25 @@ class LogPosteriorRegionWise(object):#pints.LogPDF
         logPrior_m_mul = np.sum(stats.norm.logpdf(m_mul,-0.1115718, 0.4723807)) 
         
         log_prior = logPrior_psir + logPrior_I0 + logPrior_m_mul 
-        return log_likelihood #+ log_prior
+        return log_likelihood + log_prior
     
-    def sample(self, parameters, joint_reg=False):
-        assert len(parameters) == self.n_params        
-        if not joint_reg:            
-            dI = parameters[0]
-            ksens, kspec, eta = parameters[1:4]
-            psir, I0, p_dead  = parameters[4], parameters[5], parameters[6:13]
-            beta_rw_sd = parameters[13]
-            
-        else:            
-            dI = parameters[0]
-            ksens, kspec, eta = parameters[1:4]
-            p_dead = parameters[4:11]
-            beta_rw_sd = parameters[11]
-            psir, I0  = parameters[12], parameters[13]                     
+    def sample(self, parameters):
+        assert len(parameters) == self.n_params                 
+        dI = parameters[0]
+        ksens, kspec, eta = parameters[1:4]
+        p_dead = parameters[4:11]
+        beta_rw_sd = parameters[11]
+        psir, I0  = parameters[12], parameters[13]                     
 
         m_mul = parameters[14:17]          
         beta_rw = parameters[17:33]  
-        beta_rw = np.hstack(([0], beta_rw))
+        beta_rw = np.hstack(([0], beta_rw)) 
         # Call the simulator to get the expected deaths, sero assay series
         first_beta = beta_rw[:1]
         assert first_beta == 0
-        mu_death, S_ = self._forward_model.simulate(dI, psir, beta_rw, I0, p_dead, m_mul)
-
-        # Aggregate half days for death series
-        ag_mu_gp = np.add.reduceat(mu_death,np.arange(0,len(mu_death),2))
-
-        # Now sample the individual data streams
-        death_ppc = self.death_lik(ag_mu_gp, eta, True)
-        sero_ppc = self.sero_lik(S_, ksens, kspec, True)  
-        return  death_ppc, sero_ppc 
+        nnis = self._forward_model.simulate(dI, psir, beta_rw, I0, p_dead, m_mul, generate=True)
+        ag_mu_gp = np.add.reduceat(nnis,np.arange(0,len(nnis),2))
+        return  nnis#self.death_lik(ag_mu_gp, eta, sample = True)
 
     def generate_R(self, parameters, joint_reg=False): 
         assert len(parameters) == self.n_params          

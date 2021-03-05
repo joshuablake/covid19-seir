@@ -5,9 +5,7 @@ import scipy.stats as stats
 import scipy.signal as signal
 from .CPP import seeiir_ode
 from .CPP import daily_betas
- 
-
-
+import matplotlib.pyplot as plt
 class ForwardModelRegionWise(object):
     def __init__(self, dt, time, A, pop_size_N, mixing_matrix, \
                         seventh_breakpoint, lockdn_breakpoint, 
@@ -167,11 +165,11 @@ class ForwardModelRegionWise(object):
         for a in range(A):
             conv_series[:,a] = conv_series[:,a]*p[a]
      
-        return conv_series
+        return conv_series, NNI
 
     def brownian(self, parameters):
         def rhs(y, t, p):
-            T = 17
+            T = 130.5#17
             expansion = 0.
             for i in range(len(p)-1):
                 A1 = ( ((2.0*i)-1.0)*np.pi)
@@ -179,7 +177,8 @@ class ForwardModelRegionWise(object):
                 expansion += p[i]* np.sqrt(2/T)*np.cos((A1/A2)*t)
             dy = (1*(-y)) + (p[-1]*expansion)
             return dy
-        times = np.arange(0,17,1)
+        #times = np.arange(0,17,1)
+        times = np.arange(0,131,0.5)
         values = odeint(rhs, 0.0, times, (parameters,))
         return values
         
@@ -192,13 +191,20 @@ class ForwardModelRegionWise(object):
 
         grid_space = int(1/dt)            
         betasplit = self.brownian(beta)
+        beta_mat = np.zeros((self._lockdn_breakpoint,region))
+        beta_mat = np.vstack((beta_mat,betasplit)) 
+        #beta_mat[-((breakpoints_list[2]+1) - (breakpoints_list[1])):,:]
+        # =beta_mat[-((breakpoints_list[2]+1) - (breakpoints_list[1])),:]
+        """
         beta_mat = np.zeros((seventh_breakpoint,region))
-        for i in range(2, betasplit.shape[0]+1):
-            beta_mat = np.vstack((beta_mat,np.tile(np.sum(betasplit[:i,:],axis=0),(grid_space*7,1)))) 
+        for i in range(1, betasplit.shape[0]):
+            beta_mat = np.vstack((beta_mat,np.tile(betasplit[i,:],(grid_space*7,1)))) 
         
-        beta_mat = np.vstack((beta_mat,np.tile(np.sum(betasplit,axis=0),(((breakpoints_list[2]+1) - (breakpoints_list[1])),1)))) 
+        beta_mat = np.vstack((beta_mat,np.tile(betasplit[-1],(((breakpoints_list[2]+1)
+         - (breakpoints_list[1])),1)))) 
+        """
         assert len(dayindex) == beta_mat.shape[0]
-        return beta_mat
+        return beta_mat, betasplit
     """
     def daily_betas(self, beta):
         dayindex = self._dayindex 
@@ -207,21 +213,27 @@ class ForwardModelRegionWise(object):
         assert len(dayindex) == beta_mat.shape[0]
         return beta_mat
     """
-    def simulate(self, _dI, _psir, _beta_rw, _I0, _p_dead, _m_mul): 
+    def simulate(self, _dI, _psir, _beta_rw, _I0, _p_dead, _m_mul, generate=False): 
         
         ### Solve the SEEIIR ODE using Euler regionwise
         _dI = _dI + 2.0
-        #daily_beta_rw = self.daily_betass(_beta_rw)
-        #test_beta = _beta_rw[:,None].reshape((-1,))
-        daily_beta_rw = np.array(daily_betas.DailyBrownianBetas(_beta_rw, 17, self._seventh_breakpoint, \
-            self._breakpoints_list[2], self._breakpoints_list[1], 2))
+        daily_beta_rw, ou_series = self.daily_betass(_beta_rw)
         
+        #daily_beta_rw = np.array(daily_betas.DailyBrownianBetas(_beta_rw, 17, 
+        # self._seventh_breakpoint, \
+        #    self._breakpoints_list[2], self._breakpoints_list[1], 2))
+        #plt.plot(daily_beta_rw)
+        #plt.savefig('./figures/joint/daily_betas.png')
         daily_mix_matrix = self._mixing_matrix
 
         s, lamda= self.transmission(_dI, _psir, daily_mix_matrix, _m_mul, 
                                 _I0, daily_beta_rw, self._lockdn_breakpoint)            
-        expected_deaths = self.convolution(s, lamda, _p_dead).reshape((s.shape[0],self._A))        
-        return expected_deaths, s
+        expected_deaths, nnis = self.convolution(s, lamda, _p_dead)
+        expected_deaths = expected_deaths.reshape((s.shape[0],self._A))        
+        if generate:
+            return nnis#ou_series.reshape((-1,))#expected_deaths#nnis#
+        else:
+            return expected_deaths, s
 
     def test(self):
         dt = self._dt 

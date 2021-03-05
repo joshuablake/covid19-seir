@@ -36,7 +36,7 @@ N = np.array([74103, 318183, 804260, 704025, 1634429, 1697206, 683583, 577399,
 idx_w = pd.date_range('2020-02-17 00:00:00', '2020-08-01 12:00:00', freq='W-TUE')
 idx_d = pd.date_range('2020-02-17 00:00:00', '2020-08-01 12:00:00', freq='12H')
 ts_d = pd.Series(range(len(idx_d)), index=idx_d)
-a= breakpoint(ts_d, idx_d, idx_w)
+a= breakpoint(ts_d, idx_d, idx_w)#make this spit out the breakpoints when passed in the dates
 breakpoints = np.array(breakpoint(ts_d, idx_d, idx_w)[1])
 list_brk_beta = [breakpoints[5],breakpoints[-3], breakpoints[-1]]
 list_brk_mix = [breakpoints[5],*breakpoints[-2:]]
@@ -91,19 +91,19 @@ for reg_model in range(regions):
 #######################################################################################
 ########################    DEFINE starting PARAMETERS    #############################
 #######################################################################################
-dI = [0.5033387]
-ksens = [0.7078755]
-kspec = [0.9650125]
+dI = [0.6033387]
+ksens = [0.4078755]
+kspec = [0.6650125]
 eta = [0.5]
 psir = np.array([0.281224110810985,0.246300679874443, 0.230259384150778, 
         0.307383663711624, 0.249492140587071, 0.224509782739688, 0.234528728809235])
 I0 = np.array([-16.7064769395683, -14.3327333035582,
                 -15.0542472007424, -17.785749594464, -15.8038617705659,
                 -15.3720269985272, -16.3667281951197])
-p_dead = [0.00000577188478860128,0.00000957867182705255, 
-                0.000045278018816958, 0.000323870211139221,
-                0.00471791669192503, 0.0316645720110774, 0.202480672513791]
-beta_rw_sd = [0.1510573]
+p_dead = [0.00000457188478860128,0.00000557867182705255, 
+                0.000025278018816958, 0.000623870211139221,
+                0.00171791669192503, 0.0516645720110774, 0.102480672513791]
+beta_rw_sd = [0.3510573]
 m_mul = np.array(np.split(np.loadtxt('./model_data/m_mul_starts.txt'),regions,axis=0)).reshape((regions,3)).T 
 beta_rw = np.loadtxt('./model_data/beta_starts.txt')
 beta_rw = np.array(np.split(beta_rw,regions, axis=0)).T 
@@ -126,11 +126,11 @@ X0 = np.hstack(start)
 #############    RUN AMGS regionwise independent MCMC SAMPLER    ######################
 #######################################################################################
 t0 = timer.time()
-MCMCsampler = SubBlockRegionalAMGS(regional_logPs, X0, X0, 200000)
+MCMCsampler = SubBlockRegionalAMGS(regional_logPs, X0, X0, 400000)
 trace = MCMCsampler.run()       
 t1 = timer.time()
 total = t1-t0
 print('Time for SubBlock all regions AMGS is: ',total)
-param_filename = './results/_mcmc_test_joint_real_200k.p'
+param_filename = './results/_mcmc_test_joint_real_400k.p'#'./results/_mcmc_test_joint_real_200k.p'
 pickle.dump(trace, open(param_filename, 'wb'))
 

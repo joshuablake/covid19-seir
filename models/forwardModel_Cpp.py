@@ -99,7 +99,8 @@ class ForwardModelRegionWise(object):
         m_prelock[A-1,:]=np.exp(m_mul[0])
         
 
-        m_postlock[:A-1,:]= np.exp(m_mul[1])
+        m_postlock[:A-1,:]= np.exp(m_mul[1]) ### This one goes out when 
+        #starting beta from begining
         m_postlock[A-1,:]= np.exp(m_mul[2])
         
         init_mix_mat = mix_mat[:,:,0]*m_prelock    
@@ -144,26 +145,13 @@ class ForwardModelRegionWise(object):
         delta = NNI
         con_len = len(cdf_dead)-1
         conv_series = np.zeros((T,A))
-        """
-        cdf_dead = np.tile(cdf_dead.reshape((-1,1)),(1,A))
-        conv_series = signal.convolve(delta, cdf_dead, mode='full', method='fft')[:334,-8:]
-        """
         seeiir_ode.convolution_2D(delta, conv_series, cdf_dead, con_len)
-        """       
-        for n in range(T):
-            conv_temp = np.zeros(A)
-            for k in range(min(con_len,n)+1):
-                conv_temp += delta[n-k,:]*cdf_dead[k]
-            conv_series[n,:] = conv_temp
-        """ 
         p = np.zeros(8)
         p[0] = p_dead[0]
         p[1:] = p_dead
         for a in range(A):
-            conv_series[:,a] = conv_series[:,a]*p[a]
-     
-        return conv_series
-
+            conv_series[:,a] = conv_series[:,a]*p[a]     
+        return conv_series, NNI
     def daily_betas(self, beta):
         dt = self._dt
         seventh_breakpoint = self._seventh_breakpoint 
@@ -174,24 +162,29 @@ class ForwardModelRegionWise(object):
         grid_space = int(1/dt)            
         betasplit = beta[:,None]
         beta_mat = np.zeros((seventh_breakpoint,region))
+        rw_series = []
         for i in range(2, betasplit.shape[0]+1):
             beta_mat = np.vstack((beta_mat,np.tile(np.sum(betasplit[:i,:],axis=0),(grid_space*7,1)))) 
-        
+            rw_series.append(np.sum(betasplit[:i,:],axis=0))
         beta_mat = np.vstack((beta_mat,np.tile(np.sum(betasplit,axis=0),(((breakpoints_list[2]+1) - (breakpoints_list[1])),1)))) 
         assert len(dayindex) == beta_mat.shape[0]
-        return beta_mat
+        return beta_mat, np.array(rw_series)
 
-    def simulate(self, _dI, _psir, _beta_rw, _I0, _p_dead, _m_mul): 
+    def simulate(self, _dI, _psir, _beta_rw, _I0, _p_dead, _m_mul, generate=False): 
         
         ### Solve the SEEIIR ODE using Euler regionwise
         _dI = _dI + 2.0
-        daily_beta_rw = self.daily_betas(_beta_rw)
+        daily_beta_rw, rw_series = self.daily_betas(_beta_rw)
         daily_mix_matrix = self._mixing_matrix
 
-        s, lamda= self.transmission(_dI, _psir, daily_mix_matrix, _m_mul, 
+        s, lamda = self.transmission(_dI, _psir, daily_mix_matrix, _m_mul, 
                                 _I0, daily_beta_rw, self._lockdn_breakpoint)            
-        expected_deaths = self.convolution(s, lamda, _p_dead).reshape((s.shape[0],self._A))        
-        return expected_deaths, s
+        expected_deaths, nnis = self.convolution(s, lamda, _p_dead)
+        expected_deaths = expected_deaths.reshape((s.shape[0],self._A))  
+        if generate:
+            return nnis# expected_deaths#nnis#np.hstack(([0],rw_series.reshape((-1,))))#  nnis
+        else:
+            return expected_deaths, s
 
     def test(self):
         dt = self._dt 

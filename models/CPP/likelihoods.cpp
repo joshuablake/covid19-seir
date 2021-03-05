@@ -36,7 +36,7 @@ double eta){
                 {
                   double r = mu / eta;
                   lfx += lgamma(x + r) - lgamma(r);
-                  double p = 1 - (1 / (eta + 1));
+                  double p = 1.0 - (1.0 / (eta + 1.0));
                   lfx += ((r * log(1 - p)) + (x * log(p)));                 
                 }
             }

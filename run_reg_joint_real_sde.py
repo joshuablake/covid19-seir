@@ -123,28 +123,31 @@ for region in range(regions):
         start.append(m_mul[:,region])
         start.append(beta_rw[:,region])
 X0 = np.hstack(start)
-
+"""
 optimisation_logp = PintsLogPDF(regional_logPs)
 found_parameters, found_value = pints.optimise(
     optimisation_logp,
     X0,
     method=pints.CMAES
     )
-param_filename = 'opt.p'
+param_filename = './results/opt_map.p'
 pickle.dump(found_parameters, open(param_filename, 'wb'))
-
+"""
 #######################################################################################
 #############    RUN AMGS regionwise independent MCMC SAMPLER    ######################
 #######################################################################################
 
-"""
+param_filename = './results/opt_map.p'
+found_parameters = pickle.load( open( param_filename , "rb" ) )
+
 t0 = timer.time()
-MCMCsampler = SubBlockRegionalAMGS(regional_logPs, X0, X0, 400000)
+x0 = found_parameters
+MCMCsampler = SubBlockRegionalAMGS(regional_logPs, x0, x0, 250000)
 trace = MCMCsampler.run()       
 t1 = timer.time()
 total = t1-t0
 print('Time for SubBlock all regions AMGS is: ',total)
-param_filename = './results/_mcmc_test_joint_real_sde10_400k2.p'
+param_filename = './results/_mcmc_test_joint_real_sde10_halfdaily.p'
 pickle.dump(trace, open(param_filename, 'wb'))
-"""
+
 

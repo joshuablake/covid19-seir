@@ -16,7 +16,7 @@ class SubBlockRegionalAMGS(object):
         self._regions = int(7)
         self._sub_blocks = int(2)
         self._global_size = int(12)
-        self._regional_size = int(15)
+        self._regional_size = int(21)
 
         # This iterator churns out start index of each regional block of parameters
         self.loop_iterator = \
@@ -52,6 +52,23 @@ class SubBlockRegionalAMGS(object):
 
     def global_priors(self, global_parameters):
         #assert len(global_parameters) == self.n_params_global
+        """
+        di_m = -1.194
+        di_std = 0.367
+        ksens_m = -0.361
+        ksens_std = 0.062
+        kspec_m = -0.0342
+        kspec_std = 0.0022
+        eta_m = -2.358
+        eta_std = 0.447
+        pdead_m = array([7.15800170e-06, 7.66056995e-06, 4.70928516e-05, 2.86707977e-04,
+            4.53641556e-03, 2.95103565e-02, 1.93017486e-01])
+        pdead_std = array([4.52648177e-06, 2.87146383e-06, 8.49859850e-06, 1.94211240e-05,
+            2.24129869e-04, 1.47381399e-03, 7.31347031e-03])
+        betasd_m = -2.260
+        betasd_std = 0.179
+        """
+        
         dI = global_parameters[0]
         ksens, kspec, eta = global_parameters[1:4]
         p_dead = global_parameters[4:11]  
@@ -59,23 +76,35 @@ class SubBlockRegionalAMGS(object):
 
         # infectious_period 
         logPrior_dI = stats.gamma.logpdf(dI, a = 1.43, scale = 1/0.549)# add 1.43,
+        #logPrior_dI = stats.norm.logpdf(dI, -1.194, 2*0.367)
         # sero sensitivity
         logPrior_ksens = stats.beta.logpdf(ksens, 23.5, 9.5)# 23.5, 9.5
+        #logPrior_ksens = stats.norm.logpdf(ksens, -0.361, 2*0.062)
         # sero specificity
         logPrior_kspec = stats.beta.logpdf(kspec, 569.5, 5.5) #569.5, 5.5
+        #logPrior_kspec = stats.norm.logpdf(kspec, -0.0342, 2*0.0022) #569.5, 5.5
         # negbin_overdispersion
-        logPrior_eta = stats.gamma.logpdf(eta, a = 1.0, scale = 1/0.2)# rate parameterisation 
+        logPrior_eta = stats.gamma.logpdf(eta, a = 1.0, scale = 1/0.2)# rate parameterisation
+        #logPrior_eta = stats.norm.logpdf(eta, -2.358, 2*0.447)# rate parameterisation 
 
         # prop_of_death (IFR)
+        
         p_dead_loc = np.array([1., 1., 1., 1., 1., 1., 9.5])
         p_dead_scale = np.array([62110.801242236, 23363.4859813084, \
             5290.00529100529, 1107.64745011086, 120.951219512195, \
             31.1543408360129, 112.])
+        logPrior_p_dead = np.sum(stats.beta.logpdf(p_dead, p_dead_loc, p_dead_scale))
+        """
         
-        logPrior_p_dead = np.sum(stats.beta.logpdf(p_dead, p_dead_loc, p_dead_scale))        
+        p_dead_loc = np.array([-12.08541767, -11.85274403,  -9.97973416,  -8.15933305,
+        -5.39684305,  -3.52426471,  -1.64569874])
+        p_dead_scale = np.array([0.77780054, 0.3952855 , 0.18166867, 0.0676136 , 0.04955964,
+       0.05006846, 0.03815104])
+        logPrior_p_dead = np.sum(stats.norm.logpdf(p_dead, p_dead_loc, 2*p_dead_scale)) 
+        """    
         # random-walk sd
-        logPrior_beta_rw_sd = stats.gamma.logpdf(beta_rw_sd, a = 1.0, scale = 1/100)#WIP was 1/100
-        #logPrior_beta_rw_sd = stats.invgamma.logpdf(beta_rw_sd,a=5.0,scale=5.0)                             
+        logPrior_beta_rw_sd = stats.gamma.logpdf(beta_rw_sd, a = 1.0, scale = 1/100)#scale was 1/100 for RW and 1 for OU
+        #logPrior_beta_rw_sd = stats.norm.logpdf(beta_rw_sd, -2.260, 2*0.179)                   
 
         logGlobPrior = logPrior_dI + logPrior_ksens + logPrior_kspec + \
             logPrior_eta + logPrior_p_dead + logPrior_beta_rw_sd    
@@ -95,6 +124,7 @@ class SubBlockRegionalAMGS(object):
 
         # Chain of stored samples
         chain = np.zeros((self._iterations, d))
+        chain_log_target = np.zeros(self._iterations)
 
         # Initial acceptance rate 
         acceptance_reg = 0
@@ -140,14 +170,7 @@ class SubBlockRegionalAMGS(object):
                             allreg_current) for thread in range(self._regions))
                         current_log_target = np.sum(current_log_targets) + \
                             self.global_priors(current[:self._global_size])
-                        
-                        """
-                        current_log_target = 0
-                        for r in range(self._regions):
-                            current_log_target += ParallelLogP(r,current[:self._global_size],
-                            allreg_current)
-                        current_log_target += global_priors(current[:self._global_size])
-                        """
+
                     # Evaluate the logP of the proposed
                     allreg_proposed = proposed[self._global_size:].reshape((self._regions,\
                         self._regional_size))
@@ -157,13 +180,7 @@ class SubBlockRegionalAMGS(object):
                         allreg_proposed) for thread in range(self._regions))
                     proposed_log_target = np.sum(proposed_log_targets) + \
                         self.global_priors(proposed[:self._global_size])
-                    """
-                    proposed_log_target = 0
-                    for r in range(self._regions):
-                        proposed_log_target += ParallelLogP(r,proposed[:self._global_size],
-                    allreg_proposed)
-                    proposed_log_target += global_priors(proposed[:self._global_size])
-                    """
+
                     # Routine MH step
                     log_ratio = proposed_log_target - current_log_target
                     log_ratio = min(np.log(1), log_ratio)
@@ -220,12 +237,18 @@ class SubBlockRegionalAMGS(object):
                             
                 # Store the current
                 chain[i,:] = current 
-
+                chain_log_target[i] = current_log_target
                 # Print-outs
-                if self._verbose and ((i % 100 == 0) or (i==self._iterations-1)):
+                if self._verbose and ((i % 2000 == 0) or (i==self._iterations-1)):
                     print('Iteration ' + str(i) + ' of ' + str(self._iterations))
                     print('Global  Acceptance rate: ' + str(acceptance_glob))
                     print('Regional  Acceptance rate: ' + str(acceptance_reg))
+                    #print('Global  beta: ' + str(np.exp(self.regionalscale)))
+                    #print('Regional  beta: ' + str(np.exp(self.globalscale)))
+                    if i>100:
+                        print('dI value: ', np.mean(chain[i-100:i,0]))
+                        print('Beta sd value: ', np.mean(chain[i-100:i,11]))
+                        print('Log target: ', np.mean(chain_log_target[i-100:i]))
 
             return chain
     

@@ -37,14 +37,14 @@ def plot_function(_trace, _burnin, _thin, _T_lines, _param_names, _ind, fig_name
       if not no_T:
         plt.axhline(_T_lines[i], linewidth=2.5, color='red')
   plt.subplots_adjust(wspace = 0.35, hspace=0.5)
-  plt.savefig('./figures/joint/real/'+fig_name+'_sde.png')
+  plt.savefig('./figures/joint/real/'+fig_name+'_hdsde.png')
   plt.close()
 
 regions = 7
-burnin = -100000
-thin = 100#500
+burnin = -50000
+thin = 50#500
 param_name_dict = give_param_names()
-param_filename = './results/_mcmc_test_joint_real_sde10_400k2.p'
+param_filename = './results/_mcmc_test_joint_real_sde10_halfdaily.p'
 trace = pickle.load( open( param_filename , "rb" ) )
 
 Paul_chain = pd.read_csv("./results/chain_sanmitra.csv")
@@ -69,7 +69,7 @@ m_mul = np.array(np.split(p_m_mul,\
 for i in range(3):
   T_lines =  m_mul[i,:]  
   param_names = param_name_dict['m_mul'+str(i+1)][:-1]
-  ind = ([param_name_dict['m_mul'+str(i+1)][-1] + (r*10) for r in range(regions)])
+  ind = ([param_name_dict['m_mul'+str(i+1)][-1] + (r*15) for r in range(regions)])
   fig_name = 'm_mul'+str(i+1)
   plot_function(trace, burnin, thin, T_lines, param_names, ind, fig_name)
 

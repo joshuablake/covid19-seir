@@ -33,9 +33,9 @@ psir = Paul_chain.as_matrix(columns=Paul_chain.columns[23:23+7])
 I0 = Paul_chain.as_matrix(columns=Paul_chain.columns[30:30+7])
 
 
-burnin = -50000#96000
-thin = 50#16
-param_filename = './results/_mcmc_test_joint_real_sde10_400k2.p'
+burnin = -200000
+thin = 200
+param_filename = './results/_mcmc_test_joint_real_400k.p'
 trace = pickle.load( open( param_filename , "rb" ) )
 trace_post_burn = trace[burnin:,:]
 py_thinned_trace_amgs = trace_post_burn[::thin,:]
@@ -110,7 +110,8 @@ data = [death_data_int, sero_data_int]
 
 x_axis = pd.date_range('2020-02-17', '2020-08-01', freq='D')
 region_starts = [12 + (i*15) for i in range(regions)]
-
+param_filename = './results/opt_mle.p'
+found_parameters = pickle.load( open( param_filename , "rb" ) )
 PPC_REG=[]                     
 for RUN_REGION in range(regions):
  
@@ -130,8 +131,8 @@ for RUN_REGION in range(regions):
         true_param = np.hstack((dI[:1000,:],ksens[:1000,:], kspec[:1000,:], eta[:1000,:],\
         p_dead[:1000,:],beta_rw_sd[:1000,:], psir_I0[:1000,:], \
         m_mul[:1000,RUN_REGION*3:3 + RUN_REGION*3], beta_rw[:1000, \
-                RUN_REGION*16:16 + RUN_REGION*16]))   
-
+                RUN_REGION*16:16 + RUN_REGION*16])) 
+        
         if RUN_REGION==0:
                 gbp = []
                 for i in range(3):
@@ -148,19 +149,22 @@ for RUN_REGION in range(regions):
         trace_regional = py_thinned_trace_amgs[:, region_starts[RUN_REGION]:region_starts[RUN_REGION]+15]
         trace_global = py_thinned_trace_amgs[:,:12]
         trace_ppc = np.concatenate((trace_global,trace_regional),axis=1)
-
+        opt_regional = found_parameters[ region_starts[RUN_REGION]:region_starts[RUN_REGION]+15]
+        opt_global = found_parameters[:12]
+        opt_mle = np.hstack((opt_global,opt_regional))
         ppc_sanmitra = []
         rand_range = random.sample(range(0, 1000), 500)
         for i in rand_range:
                 ppc_sanmitra.append(logP_sde(trace_ppc[i,:],True))#+                         logP.global_priors(trace_ppc[i,:12]))
         ppc_sanmitra_ar = np.array(ppc_sanmitra)
+        #mean_log_lik = logP_sde(opt_mle,True)
         plt.hist(ppc_sanmitra_ar,20,alpha=0.5,color='blue', label='Sanmitra')
         plt.hist(ppc_paul_ar,20,alpha=0.5,color='red', label='Paul')
-
+        #plt.axvline(mean_log_lik, linewidth=2.5, color='black')
         plt.legend()
         plt.xlabel('LogP', fontsize=20)
         plt.ylabel('R_'+str(RUN_REGION), fontsize=20)
-        plt.savefig('./figures/joint/ppc_real/'+str(RUN_REGION)+'CPP_logp.png')
+        plt.savefig('./figures/joint/ppc_real/'+str(RUN_REGION)+'CPP_logpmap.png')
         plt.close()
         print('Done region :'+str(RUN_REGION))
 

@@ -19,8 +19,8 @@ cpp_args = ['-std=c++11']
 
 ext_modules = [
     Extension(
-    'seeiir_ode',
-        ['seeiir_ode.cpp'],
+    'seeiir_odeh2',
+        ['seeiir_odeh2.cpp'],
         include_dirs=[get_pybind_include(), 
         get_pybind_include(user=True)],
     language='c++',
@@ -30,7 +30,8 @@ ext_modules = [
     'daily_betas',
         ['ou_stochastic_beta.cpp'],
         include_dirs=[get_pybind_include(), 
-        get_pybind_include(user=True)],
+        get_pybind_include(user=True),
+        "/scratch/sanmitra/boost_1_75_0"],
     language='c++',
     extra_compile_args = cpp_args,
     ),

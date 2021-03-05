@@ -41,7 +41,8 @@ class PintsLogPDF(pints.LogPDF):
         
         logPrior_p_dead = np.sum(stats.beta.logpdf(p_dead, p_dead_loc, p_dead_scale))        
         # random-walk sd
-        logPrior_beta_rw_sd = stats.gamma.logpdf(beta_rw_sd, a = 1.0, scale = 1/100)#WIP was 1/100
+        logPrior_beta_rw_sd = stats.gamma.logpdf(beta_rw_sd, a = 1.0, scale = 1.0)#WIP was 1/100
+        #logPrior_beta_rw_sd = stats.norm.logpdf(beta_rw_sd, 0.5, 0.05)
         #logPrior_beta_rw_sd = stats.invgamma.logpdf(beta_rw_sd,a=5.0,scale=5.0)                             
 
         logGlobPrior = logPrior_dI + logPrior_ksens + logPrior_kspec + \
