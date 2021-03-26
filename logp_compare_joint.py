@@ -32,14 +32,13 @@ beta_rw = Paul_chain.as_matrix(columns=Paul_chain.columns[46:46+112])
 psir = Paul_chain.as_matrix(columns=Paul_chain.columns[23:23+7])
 I0 = Paul_chain.as_matrix(columns=Paul_chain.columns[30:30+7])
 
-
 burnin = -200000
 thin = 200
 param_filename = './results/_mcmc_test_joint_real_400k.p'
 trace = pickle.load( open( param_filename , "rb" ) )
 trace_post_burn = trace[burnin:,:]
 py_thinned_trace_amgs = trace_post_burn[::thin,:]
-np.savetxt('./results/Sanmitra_chain.csv', py_thinned_trace_amgs,delimiter=",",newline='\r\n')
+np.savetxt('./results/Sanmitra_chain.csv',py_thinned_trace_amgs,delimiter=",",newline='\r\n')
 #pd.write_csv('./results/Sanmitra_chain.csv', py_thinned_trace_amgs)
 #######################################################################################
 ####################      DEFINE CONSTANTS     ########################################
@@ -109,10 +108,11 @@ data = [death_data_int, sero_data_int]
 
 
 x_axis = pd.date_range('2020-02-17', '2020-08-01', freq='D')
-region_starts = [12 + (i*15) for i in range(regions)]
+region_starts = [12 + (i*21) for i in range(regions)]
 param_filename = './results/opt_mle.p'
 found_parameters = pickle.load( open( param_filename , "rb" ) )
-PPC_REG=[]                     
+PPC_REG=[]    
+gbp = []                 
 for RUN_REGION in range(regions):
  
         forward_model_sde = ForwardModelRegionWiseSde(dt, time, A, N[:,RUN_REGION], daily_mix_matrix, \
@@ -132,12 +132,15 @@ for RUN_REGION in range(regions):
         p_dead[:1000,:],beta_rw_sd[:1000,:], psir_I0[:1000,:], \
         m_mul[:1000,RUN_REGION*3:3 + RUN_REGION*3], beta_rw[:1000, \
                 RUN_REGION*16:16 + RUN_REGION*16])) 
-        
+        """
         if RUN_REGION==0:
                 gbp = []
                 for i in range(3):
                         gbp.append(logP.global_priors(true_param[i,:12]))
                 gbp=np.array(gbp)
+        """    
+        print(beta_rw[0,RUN_REGION*16])
+        gbp.append(logP(true_param[0,:],True))
 
         ppc_paul = []
         rand_range = random.sample(range(0, 1000), 500)
@@ -152,11 +155,14 @@ for RUN_REGION in range(regions):
         opt_regional = found_parameters[ region_starts[RUN_REGION]:region_starts[RUN_REGION]+15]
         opt_global = found_parameters[:12]
         opt_mle = np.hstack((opt_global,opt_regional))
+
+        
         ppc_sanmitra = []
         rand_range = random.sample(range(0, 1000), 500)
         for i in rand_range:
                 ppc_sanmitra.append(logP_sde(trace_ppc[i,:],True))#+                         logP.global_priors(trace_ppc[i,:12]))
         ppc_sanmitra_ar = np.array(ppc_sanmitra)
+        
         #mean_log_lik = logP_sde(opt_mle,True)
         plt.hist(ppc_sanmitra_ar,20,alpha=0.5,color='blue', label='Sanmitra')
         plt.hist(ppc_paul_ar,20,alpha=0.5,color='red', label='Paul')
@@ -167,6 +173,8 @@ for RUN_REGION in range(regions):
         plt.savefig('./figures/joint/ppc_real/'+str(RUN_REGION)+'CPP_logpmap.png')
         plt.close()
         print('Done region :'+str(RUN_REGION))
+
+print(np.sum(gbp))
 
     
 

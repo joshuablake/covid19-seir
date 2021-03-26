@@ -15,12 +15,12 @@ class get_pybind_include(object):
         import pybind11
         return pybind11.get_include(self.user)
 
-cpp_args = ['-std=c++11']
+cpp_args = ["-std=c++11","-Wall", "-Wextra","-DNDEBUG", "-O3"]
 
 ext_modules = [
     Extension(
-    'seeiir_odeh2',
-        ['seeiir_odeh2.cpp'],
+    'seeiir_ode',
+        ['seeiir_ode.cpp'],
         include_dirs=[get_pybind_include(), 
         get_pybind_include(user=True)],
     language='c++',
