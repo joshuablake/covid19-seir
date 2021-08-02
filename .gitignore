@@ -7,3 +7,5 @@ mcmc/backup_files/
 data/real_data/
 figures/
 old_code/
+.hypothesis/
+.pytest_cache/
