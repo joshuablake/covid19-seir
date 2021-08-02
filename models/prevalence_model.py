@@ -1,5 +1,6 @@
 from collections import namedtuple
 import numpy as np
+from numpy.core.numeric import isclose
 
 P_STATES = 7
 P_TRANSITIONS = np.array([
@@ -27,10 +28,14 @@ class SingleRegionSingleAgeSEIRCompartmental(object):
         pi: proportion of the population that is infected initally
     """
     def __init__(self, max_time, dt = 0.5, beta_step_spacing = 7):
+        if max_time < dt:
+            raise ValueError("Need at least one step")
         self._dt = dt
         self._max_time = max_time
-        self._num_steps = int(np.ceil(max_time / dt))
-        assert self._num_steps * self._dt == self._max_time # Check for floating point issues
+        self._num_steps = int(np.round(max_time / dt))
+        if self._num_steps > 10_000:
+            raise ValueError("Too many steps required")
+        assert np.isclose(self._num_steps * self._dt, self._max_time)
         time_of_step = np.arange(0, max_time + dt, dt)
         # Index of beta value for each timestep
         self._beta_of_step = [int(i) for i in time_of_step // beta_step_spacing]
@@ -48,18 +53,40 @@ class SingleRegionSingleAgeSEIRCompartmental(object):
         dL: length of the latent period
         dI: length of the infectious period
         psir: initial rate of exponential growth?
-        I0: number of initially infected individuals?
-        pi: proportion of the population initially susceptible
+        i0: proportion of population initially infected 
+        pi: proportion of population with prior immunity
     """
-    def _init_transmission(self, dL, dI, psir, I0, pi):
-        # Change periods into rates
-        sigma = 2./dL * self._dt
-        gamma = 2./dI * self._dt
+    def _init_transmission(self, dL, dI, psir, i0, pi):
+        if not (
+                # If either period too short than finite differences is bad
+                self._dt <= dL and
+                self._dt <= dI and
+                # Avoid overflows
+                abs(psir) <= 10 and
+                # Positive number of initial exposed and infecteds
+                i0 >= 0 and
+                (psir >= 0 or (dL < 2/(1-np.exp(psir*self._dt)) and
+                dI < 2/(1-np.exp(psir*self._dt)))) and
+                # pi is a proportion
+                0 <= pi <= 1 and
+                # Require R0 > 0
+                (psir >= 0 or dI * -psir < 2)
+            ):
+            raise ValueError("Impossible values for model")
+
+        # Change periods into rates per day (not per step as elsewhere)
+        sigma = 2./dL
+        gamma = 2./dI
         
         # See PNAS paper for explanation of parameterisation
-        r0_init = psir*dI*((psir*dL/2 + 1)**2)/ (1- (1/(psir*dI/2 + 1)**2))
+        if np.isclose(psir, 0):
+            r0_init = 1
+        else:
+            r0_init = psir*dI*((psir*dL/2 + 1)**2)/ (1- (1/(psir*dI/2 + 1)**2))
+        if dI * i0 > r0_init:
+            raise ValueError("Hazard too high: would mean more than whole population infected")
         alpha = np.exp(psir*self._dt) - 1
-        I_init = (dI * np.exp(I0))/r0_init
+        I_init = (dI * i0) / r0_init
 
         i1_init = I_init*(1 + (gamma/(alpha + gamma)))**-1
         i2_init = I_init - i1_init
@@ -67,6 +94,8 @@ class SingleRegionSingleAgeSEIRCompartmental(object):
         e1_init = e2_init*(alpha + sigma)/sigma
         r_init = 1 - pi
         s_init = 1 - i1_init - i2_init - e1_init - e2_init - r_init
+        if s_init <= 0:
+            raise ValueError("Values of pi and i0 imply more than entire population")
 
         init_state = SEIR_state(
             s_init, e1_init, e2_init, i1_init, i2_init, r_init,
@@ -76,11 +105,11 @@ class SingleRegionSingleAgeSEIRCompartmental(object):
         return init_state, r0_init
 
     def _calculate_gradient(self, start_state, beta_t, dL, dI):
-        # Change periods into rates
+        # Change periods into rates per timestep
         sigma = 2./dL * self._dt
         gamma = 2./dI * self._dt
 
-        S_to_E1 = beta_t * start_state.S * (start_state.I1 + start_state.I2) 
+        S_to_E1 = beta_t * start_state.S * (start_state.I1 + start_state.I2)  * self._dt
         E1_to_E2 = sigma * start_state.E1
         E2_to_I1 = sigma * start_state.E2
         I1_to_I2 = gamma * start_state.I1
@@ -108,11 +137,11 @@ class SingleRegionSingleAgeSEIRCompartmental(object):
         assert self.check_state(new_state)
         return SEIR_state(*new_state)
 
-    def simulate(self, beta, dL, dI, psir, I0, pi):
+    def simulate(self, beta, dL, dI, psir, i0, pi):
         assert len(beta) == self._num_betas
         nni = [0] * int(self._num_steps * self._dt)
         prev = [0] * int(self._num_steps * self._dt)
-        prev_state, r0_init = self._init_transmission(dL, dI, psir, I0, pi)
+        prev_state, r0_init = self._init_transmission(dL, dI, psir, i0, pi)
         cur_state = prev_state
         beta = np.array([1] + beta) * r0_init / dI
         for i in range(self._num_steps):
@@ -122,11 +151,4 @@ class SingleRegionSingleAgeSEIRCompartmental(object):
             nni[day_num] += prev_state.S - cur_state.S
             prev[day_num] += sum(cur_state[-(P_STATES-1):]) / 2
             prev_state = cur_state
-        return nni, prev
-
-
-p = SingleRegionSingleAgeSEIRCompartmental(100)
-t0, _ = p._init_transmission(2, 2, 1, np.log(0.0001), 0.5)
-t1 = p._single_step(t0, 1, 1, 1)
-out = p.simulate([1] * p._num_betas, 1, 1, 1, np.log(0.0001), 0.5)
-print("a")
+        return nni, prev, cur_state
