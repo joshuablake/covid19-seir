@@ -9,3 +9,4 @@ figures/
 old_code/
 .hypothesis/
 .pytest_cache/
+data/simulated/
