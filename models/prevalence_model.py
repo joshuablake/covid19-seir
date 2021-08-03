@@ -67,8 +67,8 @@ class SingleRegionSingleAgeSEIRCompartmental(object):
                 abs(psir) <= 10 and
                 # Positive number of initial exposed and infecteds
                 i0 >= 0 and
-                (psir >= 0 or (dL < 2/(1-np.exp(psir*self._dt)) and
-                dI < 2/(1-np.exp(psir*self._dt)))) and
+                (psir >= 0 or dL < 2/(1-np.exp(psir*self._dt))) and
+                (psir >= 0 or dI < 2/(1-np.exp(psir*self._dt))) and
                 # pi is a proportion
                 0 <= pi <= 1 and
                 # Require R0 > 0
@@ -147,7 +147,7 @@ class SingleRegionSingleAgeSEIRCompartmental(object):
         prev = np.zeros(int(self._num_steps * self._dt))
         prev_state, r0_init = self._init_transmission(dL, dI, psir, i0, pi)
         cur_state = prev_state
-        beta = np.array([1] + beta) * r0_init / dI
+        beta = np.insert(beta, 0, 1) * r0_init / dI
         prev_day = -1
         steps_since_day_change = 0
         for i in range(self._num_steps):
