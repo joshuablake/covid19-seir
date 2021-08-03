@@ -139,7 +139,6 @@ class SingleRegionSingleAgeSEIRCompartmental(object):
     def _single_step(self, start_state, beta_t, dL, dI):
         gradient = self._calculate_gradient(start_state, beta_t, dL, dI)
         new_state = np.array(start_state) + np.array(gradient) * self._dt
-        assert self.check_state(new_state)
         return SEIR_state(*new_state)
 
     def simulate(self, beta, dL, dI, psir, i0, pi):
@@ -149,11 +148,18 @@ class SingleRegionSingleAgeSEIRCompartmental(object):
         prev_state, r0_init = self._init_transmission(dL, dI, psir, i0, pi)
         cur_state = prev_state
         beta = np.array([1] + beta) * r0_init / dI
+        prev_day = -1
+        steps_since_day_change = 0
         for i in range(self._num_steps):
             day_num = int(i * self._dt)
+            if day_num == prev_day:
+                steps_since_day_change += 1
+            else:
+                steps_since_day_change = 1
+                prev_day = day_num
             beta_t = beta[self._beta_of_step[i]]
             cur_state = self._single_step(cur_state, beta_t, dL, dI)
             nni[day_num] += prev_state.S - cur_state.S
-            prev[day_num] += sum(cur_state[-(P_STATES-1):]) / 2
+            prev[day_num] = (sum(cur_state[-(P_STATES-1):]) + prev[day_num] * (steps_since_day_change - 1)) / steps_since_day_change
             prev_state = cur_state
         return nni, prev, cur_state
