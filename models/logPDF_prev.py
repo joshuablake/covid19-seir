@@ -24,14 +24,14 @@ class LogPosteriorOneRegion(object):
         model_params_to_estimate = [p for p in PARAMS if p not in fixed_params.keys()]
         beta_params = ["beta_rw_sd"] + ["beta[{}]".format(i) for i in range(forward_model._num_betas)]
         self._estimated_params = tuple(model_params_to_estimate + beta_params)
-        self._n_params = len(self._estimated_params)
+        self.n_params = len(self._estimated_params)
         self._transform = False
 
     def _log_lik(self, results):
         return sum(stats.binom.logpmf(self._positives, self._tests, results[1]))
 
     def __call__(self, parameters, joint_reg=False):
-        assert len(parameters) == self._n_params
+        assert len(parameters) == self.n_params
         named_params = self._fixed_params.append(pd.Series(data=parameters, index=self._estimated_params))   
         betas = parameters[-self._forward_model._num_betas:]
 
@@ -81,7 +81,7 @@ class LogPosteriorOneRegion(object):
         return  nnis#self.death_lik(ag_mu_gp, eta, sample = True)
 
     def generate_R(self, parameters, joint_reg=False): 
-        assert len(parameters) == self._n_params          
+        assert len(parameters) == self.n_params          
         if not joint_reg:            
             dI = parameters[0]
             ksens, kspec, eta = parameters[1:4]
