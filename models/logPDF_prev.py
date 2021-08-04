@@ -20,7 +20,7 @@ class LogPosteriorOneRegion(object):
         self._forward_model = forward_model
         self._positives = positive_num
         self._tests = test_num
-        self._fixed_params = pd.Series(fixed_params)
+        self._fixed_params = fixed_params
         model_params_to_estimate = [p for p in PARAMS if p not in fixed_params.keys()]
         beta_params = ["beta_rw_sd"] + ["beta[{}]".format(i) for i in range(forward_model._num_betas)]
         self._estimated_params = tuple(model_params_to_estimate + beta_params)
@@ -32,7 +32,8 @@ class LogPosteriorOneRegion(object):
 
     def __call__(self, parameters, joint_reg=False):
         assert len(parameters) == self.n_params
-        named_params = self._fixed_params.append(pd.Series(data=parameters, index=self._estimated_params))   
+        named_params = {k: v for k, v in zip(self._estimated_params, parameters)}
+        named_params.update(self._fixed_params)
         betas = parameters[-self._forward_model._num_betas:]
 
         ## Now the priors ####
@@ -45,13 +46,12 @@ class LogPosteriorOneRegion(object):
 
         
         # Call the simulator to get the expected nnis and prev
+        named_params["i0"] = np.exp(named_params["i0"])
+        params_for_sim = {k: named_params[k] for k in PARAMS}
+        params_for_sim["beta"] = np.exp(betas)
         try:
-            named_params["i0"] = np.exp(named_params["i0"])
-            params_for_sim = named_params[PARAMS].to_dict()
-            params_for_sim["beta"] = np.exp(betas)
             result = self._forward_model.simulate(**params_for_sim)
         except ValueError:
-            print("Invalid params")
             return -Inf
 
         # Now calculate the individual data stream log Likelihoods
