@@ -1,5 +1,6 @@
 from __future__ import absolute_import, division
 from __future__ import print_function, unicode_literals
+from math import isfinite
 import numpy as np
 import scipy.stats as stats
 import time
@@ -49,6 +50,8 @@ class SingleBlockAMGS(object):
             # Evaluate the logP if first iteration of the chain            
             if i==0:
                 current_log_target = self._target(current)
+                if not np.isfinite(current_log_target):
+                    raise ValueError("Posterior density not finite at starting value")
 
             # Evaluate the logP of the proposed
             proposed_log_target = self._target(proposed)
