@@ -133,7 +133,6 @@ class SingleRegionSingleAgeSEIRCompartmental(object):
             I2_to_R,
             *P_gradient
         )
-        assert np.isclose(sum(gradient[:6]), 0)
         return gradient
 
     def _single_step(self, start_state, beta_t, dL, dI):
