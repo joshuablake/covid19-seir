@@ -104,7 +104,6 @@ def test_reduction_in_S(start_state, dt, beta_t):
         expected_reduction = start_state.S
     assert np.isclose(actual_reduction, expected_reduction)
 
-#@mark.skip
 @given(
     #num_steps = st.integers(min_value=142, max_value=1000),
     dt_over_1 = st.integers(min_value=1, max_value=10),
