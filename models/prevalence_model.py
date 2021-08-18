@@ -35,12 +35,14 @@ class BaseModel(object):
         self._num_steps = int(np.round(max_time / dt))
         if self._num_steps > 10_000:
             raise ValueError("Too many steps required")
+        if not np.isclose(self._num_steps, max_time / dt):
+            raise ValueError("Max time must be divisible by step size")
         assert np.isclose(self._num_steps * self._dt, self._max_time)
         time_of_step = np.linspace(0, max_time - self._dt, self._num_steps)
         # Index of beta value for each timestep
         self._beta_of_step = [int(i) for i in time_of_step // beta_step_spacing]
         self._num_betas = self._beta_of_step[-1]
-        if self._num_steps < self._num_betas + 1 or not np.isclose(beta_step_spacing % dt, 0):
+        if self._num_steps < self._num_betas + 1 or not (np.isclose(beta_step_spacing % dt, 0) or np.isclose(beta_step_spacing % dt, dt)):
             raise ValueError("beta_step_spacing should be a multiple of dt")
     
     def _check_inital_arg_values(self, dL, dI, psir, i0, pi):
@@ -250,7 +252,7 @@ class SingleRegionStratifiedSEIRCompartmental(BaseModel):
         e1_init = e2_init*(alpha + sigma)/sigma
         r_init = 1 - pi
         s_init = 1 - i1_init - i2_init - e1_init - e2_init - r_init
-        if (s_init <= 0).any():
+        if (s_init < 0).any():
             raise ValueError("Values of pi and i0 imply more than entire population")
         p_init = np.zeros((len(self.STATE_NAMES) - 6, self._num_strata))
 

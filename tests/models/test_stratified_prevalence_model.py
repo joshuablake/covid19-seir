@@ -102,9 +102,9 @@ def test_init_generated(max_time, dt_over_1, dL, dI, psir, i0, pi, n_strata):
 def test_single_step_no_infections_full_move_dt_half(start_state, dt):
     n_strata = start_state.shape[1]
     max_time = max(2 * dt, 2)
-    num_matrices = int(max_time / dt)
+    num_matrices = int((max_time - dt) // dt) + 1
     model = SingleRegionStratifiedSEIRCompartmental(np.ones((num_matrices, n_strata, n_strata)), max_time, dt, beta_step_spacing=dt)
-    final_state = model._single_step(start_state, 0, 2*dt, 2*dt)
+    final_state = model._single_step(start_state, np.zeros((n_strata, n_strata)), 2*dt, 2*dt)
     assert model.check_state(final_state)
     expected = np.vstack((
         model.get_compartment(start_state, "S"), # S
