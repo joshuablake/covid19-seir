@@ -156,8 +156,9 @@ def test_simulate_epidemic(dt_over_1, beta, dL, dI, psir, i0, pi):
     assert np.all(np.logical_or(0 < prev, np.isclose(prev, 0)))
     assert np.all(prev < final_state.R)
 
-def test_num_betas():
-    assert SingleRegionStratifiedSEIRCompartmental(5, 0.5)._num_betas == 0
-    assert SingleRegionStratifiedSEIRCompartmental(5, 0.5, 4)._num_betas == 1
-    assert SingleRegionStratifiedSEIRCompartmental(5, 0.5, 2)._num_betas == 2
-    assert SingleRegionStratifiedSEIRCompartmental(7, 0.5)._num_betas == 0
+@given(st.integers(min_value=1, max_value=100))
+def test_num_betas(n_strata):
+    assert SingleRegionStratifiedSEIRCompartmental(np.ones((1, n_strata, n_strata)), 5, 0.5)._num_betas == 0
+    assert SingleRegionStratifiedSEIRCompartmental(np.ones((2, n_strata, n_strata)), 5, 0.5, 4)._num_betas == 1
+    assert SingleRegionStratifiedSEIRCompartmental(np.ones((3, n_strata, n_strata)), 5, 0.5, 2)._num_betas == 2
+    assert SingleRegionStratifiedSEIRCompartmental(np.ones((1, n_strata, n_strata)), 7, 0.5)._num_betas == 0
