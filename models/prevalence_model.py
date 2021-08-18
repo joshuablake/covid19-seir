@@ -1,6 +1,6 @@
 from collections import namedtuple
 import numpy as np
-from numpy.core.numeric import isclose
+from scipy.linalg import block_diag
 
 P_STATES = 7
 P_TRANSITIONS = np.array([
@@ -18,7 +18,7 @@ SEIR_state = namedtuple(
     ["S", "E1", "E2", "I1", "I2", "R"] + ["P{}".format(i) for i in range(7)]
 )
 
-class SingleRegionSingleAgeSEIRCompartmental(object):
+class BaseModel(object):
     """Create a model, with configuration that doesn't change.
 
     Params:
@@ -42,7 +42,37 @@ class SingleRegionSingleAgeSEIRCompartmental(object):
         self._num_betas = self._beta_of_step[-1]
         if self._num_steps < self._num_betas + 1 or not np.isclose(beta_step_spacing % dt, 0):
             raise ValueError("beta_step_spacing should be a multiple of dt")
+    
+    def _check_inital_arg_values(self, dL, dI, psir, i0, pi):
+        pi = np.array(pi)
+        if (
+                # If either period too short than finite differences is bad
+                self._dt <= dL / 2 and
+                self._dt <= dI / 2 and
+                # Avoid overflows
+                abs(psir) <= 10 and
+                # Positive number of initial exposed and infecteds
+                i0 >= 0 and
+                (psir >= 0 or dL < 2/(1-np.exp(psir*self._dt))) and
+                (psir >= 0 or dI < 2/(1-np.exp(psir*self._dt))) and
+                # pi is a proportion
+                (0 <= pi).all() and (pi <= 1).all() and
+                # Require R0 > 0
+                (psir >= 0 or dI * -psir < 2)
+            ):
+            return
+        raise ValueError("Impossible values for model")
 
+    def _calc_r0(self, dL, dI, psir):        
+        # See PNAS paper for explanation of parameterisation
+        if np.isclose(psir, 0):
+            r0_init = 1
+        else:
+            r0_init = psir*dI*((psir*dL/2 + 1)**2)/ (1- (1/(psir*dI/2 + 1)**2))
+
+        return r0_init
+
+class SingleRegionSingleAgeSEIRCompartmental(BaseModel):
     def check_state(self, state):
         return (
             np.isclose(sum(state[:6]), 1) and
@@ -59,36 +89,18 @@ class SingleRegionSingleAgeSEIRCompartmental(object):
         pi: proportion of population with prior immunity
     """
     def _init_transmission(self, dL, dI, psir, i0, pi):
-        if not (
-                # If either period too short than finite differences is bad
-                self._dt <= dL and
-                self._dt <= dI and
-                # Avoid overflows
-                abs(psir) <= 10 and
-                # Positive number of initial exposed and infecteds
-                i0 >= 0 and
-                (psir >= 0 or dL < 2/(1-np.exp(psir*self._dt))) and
-                (psir >= 0 or dI < 2/(1-np.exp(psir*self._dt))) and
-                # pi is a proportion
-                0 <= pi <= 1 and
-                # Require R0 > 0
-                (psir >= 0 or dI * -psir < 2)
-            ):
-            raise ValueError("Impossible values for model")
-
-        # Change periods into rates per day (not per step as elsewhere)
-        sigma = 2./dL
-        gamma = 2./dI
+        self._check_inital_arg_values(dL, dI, psir, i0, pi)
+        r0_init = self._calc_r0(dL, dI, psir)
         
-        # See PNAS paper for explanation of parameterisation
-        if np.isclose(psir, 0):
-            r0_init = 1
-        else:
-            r0_init = psir*dI*((psir*dL/2 + 1)**2)/ (1- (1/(psir*dI/2 + 1)**2))
         if dI * i0 > r0_init:
             raise ValueError("Hazard too high: would mean more than whole population infected")
-        alpha = np.exp(psir*self._dt) - 1
         I_init = (dI * i0) / r0_init
+        
+        # Change periods into rates per day
+        sigma = 2./dL
+        gamma = 2./dI
+
+        alpha = np.exp(psir*self._dt) - 1
         i1_init = I_init*(1 + (gamma/(alpha + gamma)))**-1
         i2_init = I_init - i1_init
         e2_init = i1_init*(alpha + gamma)/sigma
@@ -106,7 +118,7 @@ class SingleRegionSingleAgeSEIRCompartmental(object):
         return init_state, r0_init
 
     def _calculate_gradient(self, start_state, beta_t, dL, dI):
-        # Change periods into rates per timestep
+        # Change periods into rates
         sigma = 2./dL
         gamma = 2./dI
 
@@ -159,6 +171,178 @@ class SingleRegionSingleAgeSEIRCompartmental(object):
             beta_t = beta[self._beta_of_step[i]]
             cur_state = self._single_step(cur_state, beta_t, dL, dI)
             nni[day_num] += prev_state.S - cur_state.S
+            prev[day_num] = (sum(cur_state[-(P_STATES-1):]) + prev[day_num] * (steps_since_day_change - 1)) / steps_since_day_change
+            assert self.check_state(cur_state)
+            prev_state = cur_state
+        return nni, prev, cur_state
+
+
+
+
+class SingleRegionStratifiedSEIRCompartmental(BaseModel):
+    STATE_NAMES = tuple(["S", "E1", "E2", "I1", "I2", "R"] + ["P{}".format(i) for i in range(7)])
+    STATE_POS = {name: i for i, name in enumerate(STATE_NAMES)}
+    P_STATES = slice(7, 6+7)
+
+    """Create a model, with configuration that doesn't change.
+
+    Params:
+        matrices: numpy array of (steps, num_strata, num_strata) giving contact matrices at each step
+    """
+    def __init__(self, matrices, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        assert len(matrices.shape) == 3
+        assert matrices.shape[1] == matrices.shape[2]
+        assert matrices.shape[0] == self._num_betas + 1
+        self._num_strata = matrices.shape[2]
+        self._base_matrices = matrices
+
+    def check_state(self, state):
+        return (
+            np.allclose(state[:6,].sum(axis=0), 1) and
+            np.all(np.logical_or(np.array(state) >= 0, np.isclose(state, 0)))
+        )
+
+    def get_compartment(self, state, compartment):
+        return state[self.STATE_POS[compartment], :]
+
+    def get_stratum(self, state, stratum):
+        return state[:, stratum]
+
+    """Returns the dominant eigenvalue and corresponding eigenvector scaled so largest element is 1"""
+    def _dominant_eigen(self, matrix):
+        eigenvals, eigenvecs = np.linalg.eig(matrix)
+        dominant_eigenval_pos = np.argmax(abs(eigenvals))
+        dominant_eigenval = abs(eigenvals[dominant_eigenval_pos])
+        assert np.isscalar(dominant_eigenval)
+        dominant_eigenvec = eigenvecs[:, dominant_eigenval_pos]
+        dominant_eigenvec /= max(dominant_eigenvec)
+        return dominant_eigenval, dominant_eigenvec
+
+
+    """Calculate the system state at time 0.
+    
+    Params:
+        dL: length of the latent period
+        dI: length of the infectious period
+        psir: initial rate of exponential growth?
+        i0: proportion iniitally infected in the strata with highest initial proportion infected
+        pi: vector (one per strata) of proportion of population with prior immunity
+    """
+    def _init_transmission(self, dL, dI, psir, i0, pi, first_matrix):
+        self._check_inital_arg_values(dL, dI, psir, i0, pi)
+        
+        # Equations S2-S5 of PNAS paper
+        r0_init = self._calc_r0(dL, dI, psir)
+        r0_star, inf_dist = self._dominant_eigen(first_matrix)
+        assert (inf_dist >= 0).all()
+        matrix_multiplier = r0_init / r0_star
+        I_init = i0 * np.broadcast_to(inf_dist, (self._num_strata,))
+
+        # Change periods into rates per day (not per step as elsewhere)
+        sigma = 2./dL
+        gamma = 2./dI
+
+        alpha = np.exp(psir*self._dt) - 1
+        i1_init = I_init*(1 + (gamma/(alpha + gamma)))**-1
+        i2_init = I_init - i1_init
+        e2_init = i1_init*(alpha + gamma)/sigma
+        e1_init = e2_init*(alpha + sigma)/sigma
+        r_init = 1 - pi
+        s_init = 1 - i1_init - i2_init - e1_init - e2_init - r_init
+        if (s_init <= 0).any():
+            raise ValueError("Values of pi and i0 imply more than entire population")
+        p_init = np.zeros((len(self.STATE_NAMES) - 6, self._num_strata))
+
+        init_state = np.vstack((s_init, e1_init, e2_init, i1_init, i2_init, r_init, p_init))
+        assert self.check_state(init_state)
+        return init_state, matrix_multiplier
+
+    def _calculate_gradient(self, start_state, beta_t, dL, dI):
+        # Change periods into rates per timestep
+        sigma = 2./dL
+        gamma = 2./dI
+
+        S_to_E1 = beta_t * start_state.S * (start_state.I1 + start_state.I2)
+        E1_to_E2 = sigma * start_state.E1
+        E2_to_I1 = sigma * start_state.E2
+        I1_to_I2 = gamma * start_state.I1
+        I2_to_R = gamma * start_state.I2
+
+        # Hack to make sure we keep susceptibles non-negative
+        if S_to_E1 * self._dt > start_state.S:
+            S_to_E1 = start_state.S / self._dt
+
+        P_start = start_state[6:]
+        P_gradient = (P_TRANSITIONS @ P_start)
+        P_gradient[0] += S_to_E1
+
+        gradient = SEIR_state(
+            -S_to_E1,
+            S_to_E1 - E1_to_E2,
+            E1_to_E2 - E2_to_I1,
+            E2_to_I1 - I1_to_I2,
+            I1_to_I2 - I2_to_R,
+            I2_to_R,
+            *P_gradient
+        )
+        return gradient
+
+    def _single_step(self, start_state, B_t, dL, dI):
+        # Change periods into rates per timestep
+        sigma = 2./dL * self._dt
+        gamma = 2./dI * self._dt
+
+        # Leaving states
+        transition_rates = np.array((0, sigma, sigma, gamma, gamma, 0))
+        linear_transitions = np.diag(1 - transition_rates)
+        # Entering states
+        states_entering = np.arange(1, linear_transitions.shape[0])
+        linear_transitions[states_entering, states_entering-1] = transition_rates[:-1]
+        full_transitions = block_diag(linear_transitions, P_TRANSITIONS)
+        return full_transitions @ start_state
+
+    """Simulate a whole epidemic.
+
+    Params:
+        beta: a vector of length _num_betas with a scalar that multiplies the matrix in each step
+        dL: mean length of the latent period
+        dI: mean length of the infectious period
+        psir: initial growth rate
+        i0: proportion iniitally infected in the strata with highest initial proportion infected
+        pi: the proportion of the population without prior immunity
+        matrix_modifiers: a matrix which is element-wise multiplied by the base contact matrix.
+            May encode strata-specific infectiousness or susceptibility.
+
+    Returns:
+        nni: a (max_time, num_strata) array of number of new infections per day
+        prevalence: a (max_time, num_strata) array of number of prevalence on each day
+        final_state: the state at the end of the epidemic
+    """
+    def simulate(self, beta, dL, dI, psir, i0, pi, matrix_modifiers):
+        assert len(matrix_modifiers.shape) == 2
+        assert matrix_modifiers.shape[0] == matrix_modifiers.shape[1] == self._num_strata
+        matrices = self._base_matrices * matrix_modifiers
+
+        assert len(beta) == self._num_betas
+        nni = np.zeros(int(self._num_steps * self._dt))
+        prev = np.zeros(int(self._num_steps * self._dt))
+        prev_state, matrix_scaling = self._init_transmission(dL, dI, psir, i0, pi, matrices[0])
+        cur_state = prev_state
+        matrices *= matrix_scaling / dI
+        prev_day = -1
+        steps_since_day_change = 0
+        for i in range(self._num_steps):
+            day_num = int(i * self._dt)
+            if day_num == prev_day:
+                steps_since_day_change += 1
+            else:
+                steps_since_day_change = 1
+                prev_day = day_num
+            B_t = matrices[self._beta_of_step[i]]
+            cur_state = self._single_step(cur_state, B_t, dL, dI)
+            nni[day_num] += prev_state.S - cur_state.S
+            # Build up average day-by-day without assuming number of steps per day
             prev[day_num] = (sum(cur_state[-(P_STATES-1):]) + prev[day_num] * (steps_since_day_change - 1)) / steps_since_day_change
             prev_state = cur_state
         return nni, prev, cur_state
