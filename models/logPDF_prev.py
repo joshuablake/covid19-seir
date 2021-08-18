@@ -6,13 +6,16 @@ import scipy
 import scipy.stats as stats
 import scipy.special as special
 
-PARAMS = [
-    "psir",
-    "i0",
-    "pi",
-    "dL",
-    "dI",
-]
+PRIORS = {
+    "psir": stats.gamma(a = 31.36, scale = 1/224),
+    "i0": stats.norm(-5, 2),
+    "pi": stats.beta(23.0, 3.44),
+    "beta_rw_sd": stats.expon(scale=1),
+    "dL": None,
+    "dI": None,
+}
+
+PARAMS = [k for k in PRIORS.keys() if k != "beta_rw_sd"]
 
 class LogPosteriorOneRegion(object):
     def __init__(self, forward_model, positive_num, test_num, testing = False, fixed_params = {}):
@@ -37,18 +40,16 @@ class LogPosteriorOneRegion(object):
         betas = parameters[-self._forward_model._num_betas:]
 
         ## Now the priors ####
-        # exponential_growth_rate
-        log_prior = stats.gamma.logpdf(named_params["psir"], a = 31.36, scale = 1/224)
-        # initial infectives
-        log_prior += stats.norm.logpdf(named_params["i0"], -17.5, 1.25)
-        # initial infected
-        log_prior += stats.beta.logpdf(named_params["pi"], 3.44, 23.0)
+        log_prior = 0
+        for param, prior in PRIORS.items():
+            if param not in self._fixed_params:
+                log_prior += prior.logpdf(named_params[param])
 
         
         # Call the simulator to get the expected nnis and prev
         named_params["i0"] = np.exp(named_params["i0"])
         params_for_sim = {k: named_params[k] for k in PARAMS}
-        params_for_sim["beta"] = np.exp(betas)
+        params_for_sim["beta"] = np.exp(np.cumsum(betas))
         try:
             result = self._forward_model.simulate(**params_for_sim)
         except ValueError:
