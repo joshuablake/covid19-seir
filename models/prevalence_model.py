@@ -302,7 +302,17 @@ class SingleRegionStratifiedSEIRCompartmental(BaseModel):
         states_entering = np.arange(1, linear_transitions.shape[0])
         linear_transitions[states_entering, states_entering-1] = transition_rates[:-1]
         full_transitions = block_diag(linear_transitions, P_TRANSITIONS)
-        return full_transitions @ start_state
+        new_state = full_transitions @ start_state
+
+    
+        currently_infected = self.get_compartment(start_state, "I1") + self.get_compartment(start_state, "I2")
+        new_infections = self._dt * self.get_compartment(start_state, "S") * (B_t @ currently_infected)
+        new_infections = np.minimum(self.get_compartment(start_state, "S"), new_infections)
+        new_state[self.STATE_POS["S"], :] -= new_infections
+        new_state[self.STATE_POS["E1"], :] += new_infections
+        new_state[self.STATE_POS["P0"], :] += new_infections
+
+        return new_state
 
     """Simulate a whole epidemic.
 

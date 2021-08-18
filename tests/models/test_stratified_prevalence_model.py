@@ -1,4 +1,5 @@
 import numpy as np
+from hypothesis.extra.numpy import arrays
 from hypothesis import given, strategies as st, assume, settings
 from models.prevalence_model import SingleRegionStratifiedSEIRCompartmental
 from pytest import approx, mark
@@ -20,6 +21,29 @@ def seir_state(draw, num_strata = None, P = [0] * 7):
         num_strata = draw(st.integers(min_value=1, max_value=100))
     values = [draw(simplex(6)) + P for _ in range(num_strata)]
     return np.column_stack(values)
+
+@st.composite
+def matrices(draw, n_strata = None, num_matrices = 1):
+    if n_strata is None:
+        n_strata = draw(st.integers(min_value=1, max_value=100))
+    if num_matrices == 1:
+        return draw(arrays(
+            np.float64,
+            (n_strata, n_strata),
+            elements=st.floats(min_value=0, max_value=100, exclude_min=True)
+        ))
+    return draw(arrays(
+        np.float64,
+        (num_matrices, n_strata, n_strata),
+        elements=st.floats(min_value=0, max_value=100, exclude_min=True)
+    ))
+
+@st.composite
+def state_and_matrix(draw):
+    n_strata = draw(st.integers(min_value=1, max_value=100))
+    state = draw(seir_state(n_strata))
+    matrix = draw(matrices(n_strata, 1))
+    return state, matrix
 
 # Matrix array for one step and one stratum
 MATRICES_SINGLE = np.array([[[1]]])
@@ -117,16 +141,23 @@ def test_single_step_no_infections_full_move_dt_half(start_state, dt):
     actual = final_state[:6,:]
     assert np.allclose(actual, expected)
 
-@given(seir_state(), st.floats(min_value=0.1, max_value=5), st.floats(min_value=0, max_value=100))
-def test_reduction_in_S(start_state, dt, beta_t):
-    model = SingleRegionStratifiedSEIRCompartmental(2*dt, dt, beta_step_spacing=dt)
-    final_state = model._single_step(start_state, beta_t, 2*dt, 2*dt)
+@given(
+    state_and_matrix(),
+    st.floats(min_value=0.1, max_value=5)
+)
+def test_reduction_in_S(config, dt):
+    start_state, B_t = config
+    n_strata = start_state.shape[1]
+    max_time = 20 * dt
+    num_matrices = int((max_time - dt) // dt) + 1
+    model = SingleRegionStratifiedSEIRCompartmental(np.ones((num_matrices, n_strata, n_strata)), max_time, dt, beta_step_spacing=dt)
+    final_state = model._single_step(start_state, B_t, 2*dt, 2*dt)
     assert model.check_state(final_state)
-    actual_reduction = start_state.S - final_state.S
-    expected_reduction = beta_t * start_state.S * (start_state.I1 + start_state.I2) * dt
-    if expected_reduction > start_state.S:
-        expected_reduction = start_state.S
-    assert np.isclose(actual_reduction, expected_reduction)
+    actual_reduction = model.get_compartment(start_state, "S") - model.get_compartment(final_state, "S")
+    inital_infected = model.get_compartment(start_state, "I1") + model.get_compartment(start_state, "I2")
+    expected_reduction = model.get_compartment(start_state, "S") * dt * (B_t @ inital_infected)
+    expected_reduction = np.minimum(expected_reduction, model.get_compartment(start_state, "S"))
+    assert np.allclose(actual_reduction, expected_reduction)
 
 @given(
     #num_steps = st.integers(min_value=142, max_value=1000),
