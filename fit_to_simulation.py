@@ -15,8 +15,8 @@ known_parameters = {
     "dI": 2,
 }
 # ordered as: psir, log(i0), pi, beta_rw_sd, betas
-true_parameters = [0.15, np.log(1/1000), 0.75, 1] + [0] * model._num_betas
-start_values = [0.1, np.log(1/5000), 0.99, 1] + [0] * model._num_betas
+true_parameters = [0.15, np.log(1/1000), 0.75, 1] + [0] * model.num_betas
+start_values = [0.1, np.log(1/5000), 0.99, 1] + [0] * model.num_betas
 
 log_posterior = logPDF_prev.LogPosteriorOneRegion(
     forward_model=model,

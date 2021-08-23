@@ -34,18 +34,18 @@ class BaseModel(object):
         if max_time < dt:
             raise ValueError("Need at least one step")
         self._dt = dt
-        self._max_time = max_time
+        self.max_time = max_time
         self._num_steps = int(np.round(max_time / dt))
         if self._num_steps > 10_000:
             raise ValueError("Too many steps required")
         if not np.isclose(self._num_steps, max_time / dt):
             raise ValueError("Max time must be divisible by step size")
-        assert np.isclose(self._num_steps * self._dt, self._max_time)
+        assert np.isclose(self._num_steps * self._dt, self.max_time)
         time_of_step = np.linspace(0, max_time - self._dt, self._num_steps)
         # Index of beta value for each timestep
         self._beta_of_step = [int(i) for i in time_of_step // beta_step_spacing]
-        self._num_betas = self._beta_of_step[-1]
-        if self._num_steps < self._num_betas + 1 or not (np.isclose(beta_step_spacing % dt, 0) or np.isclose(beta_step_spacing % dt, dt)):
+        self.num_betas = self._beta_of_step[-1]
+        if self._num_steps < self.num_betas + 1 or not (np.isclose(beta_step_spacing % dt, 0) or np.isclose(beta_step_spacing % dt, dt)):
             raise ValueError("beta_step_spacing should be a multiple of dt")
     
     def _check_inital_arg_values(self, dL, dI, psir, i0, pi):
@@ -158,7 +158,7 @@ class SingleRegionSingleAgeSEIRCompartmental(BaseModel):
         return SEIR_state(*new_state)
 
     def simulate(self, beta, dL, dI, psir, i0, pi):
-        assert len(beta) == self._num_betas
+        assert len(beta) == self.num_betas
         nni = np.zeros(int(self._num_steps * self._dt))
         prev = np.zeros(int(self._num_steps * self._dt))
         prev_state, r0_init = self._init_transmission(dL, dI, psir, i0, pi)
@@ -198,8 +198,8 @@ class SingleRegionStratifiedSEIRCompartmental(BaseModel):
         super().__init__(*args, **kwargs)
         assert len(matrices.shape) == 3
         assert matrices.shape[1] == matrices.shape[2]
-        assert matrices.shape[0] == self._num_betas + 1
-        self._num_strata = matrices.shape[2]
+        assert matrices.shape[0] == self.num_betas + 1
+        self.num_strata = matrices.shape[2]
         self._base_matrices = matrices
 
     def check_state(self, state):
@@ -241,7 +241,7 @@ class SingleRegionStratifiedSEIRCompartmental(BaseModel):
         pi: vector (one per strata) of proportion of population with prior immunity
     """
     def _init_transmission(self, dL, dI, psir, i0, pi, first_matrix):
-        assert (self._num_strata == 1 and np.isscalar(pi)) or len(pi) == self._num_strata
+        assert (self.num_strata == 1 and np.isscalar(pi)) or len(pi) == self.num_strata
         self._check_inital_arg_values(dL, dI, psir, i0, pi)
         
         # Equations S2-S5 of PNAS paper
@@ -250,7 +250,7 @@ class SingleRegionStratifiedSEIRCompartmental(BaseModel):
         assert (inf_dist >= 0).all()
         assert r0_star > 0
         matrix_multiplier = r0_init / r0_star
-        I_init = i0 * np.broadcast_to(inf_dist, (self._num_strata,))
+        I_init = i0 * np.broadcast_to(inf_dist, (self.num_strata,))
 
         # Change periods into rates per day (not per step as elsewhere)
         sigma = 2./dL
@@ -265,7 +265,7 @@ class SingleRegionStratifiedSEIRCompartmental(BaseModel):
         s_init = 1 - i1_init - i2_init - e1_init - e2_init - r_init
         if np.logical_and(s_init < 0, np.logical_not(np.isclose(s_init, 0))).any():
             raise ValueError("Values of pi and i0 imply more than entire population")
-        p_init = np.zeros((len(self.STATE_NAMES) - 6, self._num_strata))
+        p_init = np.zeros((len(self.STATE_NAMES) - 6, self.num_strata))
 
         init_state = np.vstack((s_init, e1_init, e2_init, i1_init, i2_init, r_init, p_init))
         assert self.check_state(init_state)
@@ -344,14 +344,14 @@ class SingleRegionStratifiedSEIRCompartmental(BaseModel):
     """
     def simulate(self, beta, dL, dI, psir, i0, pi, matrix_modifiers):
         assert len(matrix_modifiers.shape) == 2
-        assert matrix_modifiers.shape[0] == matrix_modifiers.shape[1] == self._num_strata
-        assert len(beta) == self._num_betas
+        assert matrix_modifiers.shape[0] == matrix_modifiers.shape[1] == self.num_strata
+        assert len(beta) == self.num_betas
 
         beta = np.insert(beta, 0, 1) # First beta is always 0
         matrices =  self._base_matrices * matrix_modifiers
 
-        nni = np.zeros((int(self._num_steps * self._dt), self._num_strata))
-        prev = np.zeros((int(self._num_steps * self._dt), self._num_strata))
+        nni = np.zeros((self.max_time, self.num_strata))
+        prev = np.zeros((self.max_time, self.num_strata))
         prev_state, matrix_scaling = self._init_transmission(dL, dI, psir, i0, pi, matrices[0])
         cur_state = prev_state
         matrices *= matrix_scaling / dI * beta.reshape(self._base_matrices.shape[0], 1, 1)

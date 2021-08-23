@@ -58,7 +58,7 @@ def test_inital_state1():
     assert model.get_compartment(init_state, "E2") == approx(model.get_compartment(init_state, "I1") * np.exp(1))
     assert model.get_compartment(init_state, "E1") == approx(model.get_compartment(init_state, "E2") * np.exp(1))
     assert model.get_compartment(init_state, "R") == approx(0.1)
-    assert model._num_betas == 0
+    assert model.num_betas == 0
 
 def test_inital_state2():
     model = SingleRegionStratifiedSEIRCompartmental(np.ones((2, 1, 1)), 10, dt=0.5)
@@ -70,7 +70,7 @@ def test_inital_state2():
     assert model.get_compartment(init_state, "E2") == approx(model.get_compartment(init_state, "I1") * np.exp(0.2) / 2)
     assert model.get_compartment(init_state, "E1") == approx(model.get_compartment(init_state, "E2") * (np.exp(0.2) + 1) / 2)
     assert model.get_compartment(init_state, "R") == approx(0.05)
-    assert model._num_betas == 1
+    assert model.num_betas == 1
 
 @given(n_strata = st.integers(min_value=1, max_value=100))
 def test_inital_state2_multi_strata(n_strata):
@@ -83,7 +83,7 @@ def test_inital_state2_multi_strata(n_strata):
     assert model.get_compartment(init_state, "E2") == approx(model.get_compartment(init_state, "I1") * np.exp(0.2) / 2)
     assert model.get_compartment(init_state, "E1") == approx(model.get_compartment(init_state, "E2") * (np.exp(0.2) + 1) / 2)
     assert model.get_compartment(init_state, "R") == approx(0.05)
-    assert model._num_betas == 1
+    assert model.num_betas == 1
 
 @given(n_strata = st.integers(min_value=1, max_value=100))
 def test_inital_shrinking_epidemic(n_strata):
@@ -198,7 +198,7 @@ def test_simulate_epidemic(dt_over_1, beta, B, psir, i0, data):
 
 @given(st.integers(min_value=1, max_value=100))
 def test_num_betas(n_strata):
-    assert SingleRegionStratifiedSEIRCompartmental(np.ones((1, n_strata, n_strata)), 5, 0.5)._num_betas == 0
-    assert SingleRegionStratifiedSEIRCompartmental(np.ones((2, n_strata, n_strata)), 5, 0.5, 4)._num_betas == 1
-    assert SingleRegionStratifiedSEIRCompartmental(np.ones((3, n_strata, n_strata)), 5, 0.5, 2)._num_betas == 2
-    assert SingleRegionStratifiedSEIRCompartmental(np.ones((1, n_strata, n_strata)), 7, 0.5)._num_betas == 0
+    assert SingleRegionStratifiedSEIRCompartmental(np.ones((1, n_strata, n_strata)), 5, 0.5).num_betas == 0
+    assert SingleRegionStratifiedSEIRCompartmental(np.ones((2, n_strata, n_strata)), 5, 0.5, 4).num_betas == 1
+    assert SingleRegionStratifiedSEIRCompartmental(np.ones((3, n_strata, n_strata)), 5, 0.5, 2).num_betas == 2
+    assert SingleRegionStratifiedSEIRCompartmental(np.ones((1, n_strata, n_strata)), 7, 0.5).num_betas == 0
