@@ -3,6 +3,7 @@ import numpy as np
 from scipy.linalg import block_diag
 
 P_STATES = 7
+# Transition rates between P states
 P_TRANSITIONS = np.array([
     -1/3, 0, 0, 0, 0, 0, 0,
     1/3, -0.2279314474033871,0,0,0,0,0,
@@ -12,6 +13,8 @@ P_TRANSITIONS = np.array([
     0, 0,0,0,0.2279314474033871,-1.1287836677440286,0,
     0, 0,0,0,0,3.1437857603953896e-4,-0.013204089629658078
 ]).reshape((P_STATES, P_STATES))
+# Matrix to multiply current P to give new P
+P_STEP = np.eye(P_STATES) + P_TRANSITIONS
 
 SEIR_state = namedtuple(
     "SEIR_state",
@@ -218,7 +221,13 @@ class SingleRegionStratifiedSEIRCompartmental(BaseModel):
         dominant_eigenval = abs(eigenvals[dominant_eigenval_pos])
         assert np.isscalar(dominant_eigenval)
         dominant_eigenvec = eigenvecs[:, dominant_eigenval_pos]
+        if not np.isrealobj(dominant_eigenvec):
+            assert np.isreal(dominant_eigenvec).all()
+            dominant_eigenvec = np.real(dominant_eigenvec)
+        if (dominant_eigenvec < 0).any():
+            dominant_eigenvec *= -1
         dominant_eigenvec /= max(dominant_eigenvec)
+        assert (dominant_eigenvec <= 1).all()
         return dominant_eigenval, dominant_eigenvec
 
 
@@ -232,12 +241,14 @@ class SingleRegionStratifiedSEIRCompartmental(BaseModel):
         pi: vector (one per strata) of proportion of population with prior immunity
     """
     def _init_transmission(self, dL, dI, psir, i0, pi, first_matrix):
+        assert (self._num_strata == 1 and np.isscalar(pi)) or len(pi) == self._num_strata
         self._check_inital_arg_values(dL, dI, psir, i0, pi)
         
         # Equations S2-S5 of PNAS paper
         r0_init = self._calc_r0(dL, dI, psir)
         r0_star, inf_dist = self._dominant_eigen(first_matrix)
         assert (inf_dist >= 0).all()
+        assert r0_star > 0
         matrix_multiplier = r0_init / r0_star
         I_init = i0 * np.broadcast_to(inf_dist, (self._num_strata,))
 
@@ -252,7 +263,7 @@ class SingleRegionStratifiedSEIRCompartmental(BaseModel):
         e1_init = e2_init*(alpha + sigma)/sigma
         r_init = 1 - pi
         s_init = 1 - i1_init - i2_init - e1_init - e2_init - r_init
-        if (s_init < 0).any():
+        if np.logical_and(s_init < 0, np.logical_not(np.isclose(s_init, 0))).any():
             raise ValueError("Values of pi and i0 imply more than entire population")
         p_init = np.zeros((len(self.STATE_NAMES) - 6, self._num_strata))
 
@@ -301,7 +312,7 @@ class SingleRegionStratifiedSEIRCompartmental(BaseModel):
         # Entering states
         states_entering = np.arange(1, linear_transitions.shape[0])
         linear_transitions[states_entering, states_entering-1] = transition_rates[:-1]
-        full_transitions = block_diag(linear_transitions, P_TRANSITIONS)
+        full_transitions = block_diag(linear_transitions, P_STEP * self._dt)
         new_state = full_transitions @ start_state
 
     
@@ -334,14 +345,16 @@ class SingleRegionStratifiedSEIRCompartmental(BaseModel):
     def simulate(self, beta, dL, dI, psir, i0, pi, matrix_modifiers):
         assert len(matrix_modifiers.shape) == 2
         assert matrix_modifiers.shape[0] == matrix_modifiers.shape[1] == self._num_strata
-        matrices = self._base_matrices * matrix_modifiers
-
         assert len(beta) == self._num_betas
-        nni = np.zeros(int(self._num_steps * self._dt))
-        prev = np.zeros(int(self._num_steps * self._dt))
+
+        beta = np.insert(beta, 0, 1) # First beta is always 0
+        matrices =  self._base_matrices * matrix_modifiers
+
+        nni = np.zeros((int(self._num_steps * self._dt), self._num_strata))
+        prev = np.zeros((int(self._num_steps * self._dt), self._num_strata))
         prev_state, matrix_scaling = self._init_transmission(dL, dI, psir, i0, pi, matrices[0])
         cur_state = prev_state
-        matrices *= matrix_scaling / dI
+        matrices *= matrix_scaling / dI * beta.reshape(self._base_matrices.shape[0], 1, 1)
         prev_day = -1
         steps_since_day_change = 0
         for i in range(self._num_steps):
@@ -353,7 +366,7 @@ class SingleRegionStratifiedSEIRCompartmental(BaseModel):
                 prev_day = day_num
             B_t = matrices[self._beta_of_step[i]]
             cur_state = self._single_step(cur_state, B_t, dL, dI)
-            nni[day_num] += prev_state.S - cur_state.S
+            nni[day_num] += self.get_compartment(prev_state, "S") - self.get_compartment(cur_state, "S")
             # Build up average day-by-day without assuming number of steps per day
             prev[day_num] = (sum(cur_state[-(P_STATES-1):]) + prev[day_num] * (steps_since_day_change - 1)) / steps_since_day_change
             prev_state = cur_state

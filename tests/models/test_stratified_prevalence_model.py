@@ -23,19 +23,19 @@ def seir_state(draw, num_strata = None, P = [0] * 7):
     return np.column_stack(values)
 
 @st.composite
-def matrices(draw, n_strata = None, num_matrices = 1):
+def matrices(draw, n_strata = None, max_strata = 100, num_matrices = 1):
     if n_strata is None:
-        n_strata = draw(st.integers(min_value=1, max_value=100))
+        n_strata = draw(st.integers(min_value=1, max_value=max_strata))
     if num_matrices == 1:
         return draw(arrays(
             np.float64,
             (n_strata, n_strata),
-            elements=st.floats(min_value=0, max_value=100, exclude_min=True)
+            elements=st.floats(min_value=0.001, max_value=50)
         ))
     return draw(arrays(
         np.float64,
         (num_matrices, n_strata, n_strata),
-        elements=st.floats(min_value=0, max_value=100, exclude_min=True)
+        elements=st.floats(min_value=0.001, max_value=50)
     ))
 
 @st.composite
@@ -100,21 +100,26 @@ def test_inital_shrinking_epidemic(n_strata):
 @given(
     max_time = st.integers(min_value = 1, max_value = 10_000),
     dt_over_1 = st.integers(min_value = 1),
-    dL = st.floats(min_value = 0.001),
-    dI = st.floats(min_value = 0.001),
-    psir = st.floats(),
-    i0 = st.floats(),
-    pi = st.floats(),
-    n_strata = st.integers(min_value=1, max_value=100)
+    psir = st.floats(min_value=0, max_value=0.5),
+    i0 = st.floats(min_value=0, max_value=0.05),
+    n_strata = st.integers(min_value=1, max_value=100),
+    data = st.data()
 )
-def test_init_generated(max_time, dt_over_1, dL, dI, psir, i0, pi, n_strata):
+def test_init_generated(max_time, dt_over_1, psir, i0, n_strata, data):
     dt = 1 / dt_over_1
     beta_step_spacing=1
+    if psir < 0:
+        dI_max = min(10, 2 / -psir)
+    else:
+        dI_max = 10
+    dL = data.draw(st.floats(min_value=dt*2, max_value=10))
+    dI = data.draw(st.floats(min_value=dt*2, max_value=dI_max, exclude_max=True))
+    pi = data.draw(arrays(np.float64, (n_strata,), elements=st.floats(min_value=0, max_value=1)))
     try:
         model = SingleRegionStratifiedSEIRCompartmental(np.ones((max_time, n_strata, n_strata)), max_time, dt, beta_step_spacing)
         init_state, matrix_multiplier = model._init_transmission(dL, dI, psir, i0, pi, np.ones((n_strata, n_strata)))
     except ValueError:
-        return
+        assume(False)
     assert matrix_multiplier >= 0
     assert model.check_state(init_state)
 
@@ -162,30 +167,34 @@ def test_reduction_in_S(config, dt):
 @given(
     #num_steps = st.integers(min_value=142, max_value=1000),
     dt_over_1 = st.integers(min_value=1, max_value=10),
-    beta = st.lists(st.integers(min_value=0, max_value=100), min_size=142, max_size=142),
-    dL = st.floats(min_value=0, max_value=10, exclude_min=True),
-    dI = st.floats(min_value=0, max_value=10, exclude_min=True),
-    psir = st.floats(min_value=-1, max_value=1),
-    i0 = st.floats(min_value=0, max_value=0.1),
-    pi = st.floats(min_value=0, max_value=1)
+    beta = st.lists(st.integers(min_value=0, max_value=100), min_size=5, max_size=5),
+    B = matrices(num_matrices=6, max_strata=10),
+    psir = st.floats(min_value=0, max_value=0.5),
+    i0 = st.floats(min_value=0, max_value=0.05),
+    data = st.data()
 )
-@settings(deadline=1000, max_examples=10)
-def test_simulate_epidemic(dt_over_1, beta, dL, dI, psir, i0, pi):
-    max_time = 1000
-    #dt = max_time / num_steps
+@settings(deadline=1000)
+def test_simulate_epidemic(dt_over_1, beta, B, psir, i0, data):
     dt = 1 / dt_over_1
-    try:
-        model = SingleRegionStratifiedSEIRCompartmental(max_time, dt)
-        nni, prev, final_state = model.simulate(beta, dL, dI, psir, i0, pi)
-    except ValueError:
-        assume(False)
-    assert len(nni) == max_time
-    assert len(prev) == max_time
+    n_strata = B.shape[1]
+    modifiers = data.draw(arrays(np.float64, (n_strata, n_strata), elements=st.floats(min_value=0.1, max_value=10)))
+    max_time = 500
+    if psir < 0:
+        dI_max = min(10, 2 / -psir)
+    else:
+        dI_max = 10
+    dL = data.draw(st.floats(min_value=dt*4, max_value=10))
+    dI = data.draw(st.floats(min_value=dt*4, max_value=dI_max, exclude_max=True))
+    pi = data.draw(arrays(np.float64, (n_strata,), elements=st.floats(min_value=0.5, max_value=1)))
+    model = SingleRegionStratifiedSEIRCompartmental(B, max_time, dt, 90)
+    nni, prev, final_state = model.simulate(beta, dL, dI, psir, i0, pi, modifiers)
+    num_recovered = model.get_compartment(final_state, "R")
+    assert nni.shape == prev.shape == (max_time, n_strata)
     assert model.check_state(final_state)
-    assert np.all(np.logical_or(0 < nni, np.isclose(nni, 0)))
-    assert np.all(nni < final_state.R)
-    assert np.all(np.logical_or(0 < prev, np.isclose(prev, 0)))
-    assert np.all(prev < final_state.R)
+    assert (np.logical_or(0 < nni, np.isclose(nni, 0))).all()
+    assert (nni < num_recovered).all()
+    assert (np.logical_or(0 < prev, np.isclose(prev, 0))).all()
+    assert (prev < num_recovered).all()
 
 @given(st.integers(min_value=1, max_value=100))
 def test_num_betas(n_strata):
