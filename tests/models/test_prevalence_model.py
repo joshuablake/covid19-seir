@@ -31,6 +31,19 @@ def test_inital_state1():
     assert init_state.R == approx(0.1)
     assert model.num_betas == 0
 
+def test_inital_call_numpy():
+    model = SingleRegionSingleAgeSEIRCompartmental(1, dt=1)
+    init_state, init_R0 = model._init_transmission(2, 2, np.array([1]), np.array([0.5]),
+        np.array([0.9]))
+    assert init_R0 == approx(32/3)
+    assert model.check_state(init_state)
+    assert init_state.I1 + init_state.I2 == approx(3/32)
+    assert init_state.I1 == approx(3/32 * (1 + np.exp(-1)) ** -1)
+    assert init_state.E2 == approx(init_state.I1 * np.exp(1))
+    assert init_state.E1 == approx(init_state.E2 * np.exp(1))
+    assert init_state.R == approx(0.1)
+    assert model.num_betas == 0
+
 def test_inital_state2():
     model = SingleRegionSingleAgeSEIRCompartmental(10, dt=0.5)
     init_state, init_R0 = model._init_transmission(1, 2, 0.4, 0.5, 0.95)

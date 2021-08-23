@@ -79,9 +79,10 @@ class BaseModel(object):
 
 class SingleRegionSingleAgeSEIRCompartmental(BaseModel):
     def check_state(self, state):
+        state = np.array(state)
         return (
             np.isclose(sum(state[:6]), 1) and
-            np.all(np.logical_or(np.array(state) >= 0, np.isclose(state, 0)))
+            np.all(np.logical_or(state >= 0, np.isclose(state, 0)))
         )
 
     """Calculate the system state at time 0.
@@ -116,7 +117,8 @@ class SingleRegionSingleAgeSEIRCompartmental(BaseModel):
             raise ValueError("Values of pi and i0 imply more than entire population")
 
         init_state = SEIR_state(
-            s_init, e1_init, e2_init, i1_init, i2_init, r_init,
+            float(s_init), float(e1_init), float(e2_init),
+            float(i1_init), float(i2_init), float(r_init),
             *([0] * P_STATES)
         )
         assert self.check_state(init_state)
@@ -177,7 +179,6 @@ class SingleRegionSingleAgeSEIRCompartmental(BaseModel):
             cur_state = self._single_step(cur_state, beta_t, dL, dI)
             nni[day_num] += prev_state.S - cur_state.S
             prev[day_num] = (sum(cur_state[-(P_STATES-1):]) + prev[day_num] * (steps_since_day_change - 1)) / steps_since_day_change
-            assert self.check_state(cur_state)
             prev_state = cur_state
         return nni, prev, cur_state
 
