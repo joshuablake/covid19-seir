@@ -24,7 +24,7 @@ log_posterior = logPDF_prev.LogPosteriorOneRegion(
     test_num=data["num_tests"],
     fixed_params = known_parameters
 )
-print("Estimating: {}".format(log_posterior._estimated_params))
+#print("Estimating: {}".format(log_posterior._estimated_params))
 
 start_time = time()
 
