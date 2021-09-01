@@ -1,18 +1,40 @@
 import numpy as np
 from scipy import stats
 
-class Param(object):
-    def __init__(self, prior):
+class VectorParam(object):
+    def __init__(self, length, prior):
+        self._length = length
         self._prior = prior
 
     def __len__(self):
-        return 1
+        return self._length
+
+    def log_prior_jacobian(self, value):
+        return self._prior.logpdf(value).sum()
 
     def sample_to_value(self, value):
         return value
 
+    def draw_from_prior(self):
+        raise NotImplementedError
+
+class VectorParamMultiplePriors(VectorParam):
+    def __init__(self, length, prior):
+        assert len(prior) == length
+        super().__init__(length, prior)
+
     def log_prior_jacobian(self, value):
-        return self._prior.logpdf(value)
+        return sum(self._prior[i].logpdf(val) for i, val in enumerate(value))
+
+    def draw_from_prior(self):
+        return np.array([self._prior[i].rvs(1) for i in range(self._length)]).flatten()
+
+class Param(VectorParam):
+    def __init__(self, prior):
+        super().__init__(1, prior)
+
+    def draw_from_prior(self):
+        return self._prior.rvs(1)
 
 class FixedParam(Param):
     def __init__(self, value):
@@ -26,6 +48,9 @@ class FixedParam(Param):
 
     def log_prior_jacobian(self, value):
         return 0
+
+    def draw_from_prior(self):
+        return np.array([])
 
 class ParamTransformAfterPrior(Param):
     def __init__(self, prior, transformation):
@@ -57,3 +82,40 @@ class LogGaussianRW(Param):
     def sample_to_value(self, value):
         log_walk_increments = value[1:]
         return np.exp(log_walk_increments.cumsum())
+
+    def draw_from_prior(self):
+        sd = self._sd_prior.rvs(1)
+        log_walk_increments = stats.norm.rvs(size=self.walk_length, scale=sd)
+        return np.insert(log_walk_increments, 0, sd)
+
+class _ExtendParam(Param):
+    def __init__(self, param):
+        self._param = param
+
+    def __len__(self):
+        return len(self._param)
+
+    def log_prior_jacobian(self, value):
+        return self._param.log_prior_jacobian(value)
+
+    def sample_to_value(self, value):
+        return self._param.sample_to_value(value)
+
+    def draw_from_prior(self):
+        return self._param.draw_from_prior()
+
+class MatrixSusceptibleChildren(_ExtendParam):
+    def __init__(self, param, n_strata, n_children_strata):
+        assert n_strata > n_children_strata
+        super().__init__(param)
+        self._n_strata = n_strata
+        self._n_children_strata = n_children_strata
+
+    def _value_to_matrix(self, value):
+        children = np.broadcast_to(value, (self._n_children_strata, self._n_strata))
+        adults = np.broadcast_to(1, (self._n_strata - self._n_children_strata, self._n_strata))
+        return np.vstack([children, adults])
+
+    def sample_to_value(self, value):
+        _value = super().sample_to_value(value)
+        return self._value_to_matrix(_value)
