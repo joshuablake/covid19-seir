@@ -75,7 +75,7 @@ class LogPosteriorOneRegion(object):
                 assert np.isscalar(value_len)
                 try:
                     array.append(value[0])
-                except TypeError:
+                except (TypeError, IndexError):
                     array.append(value)
             else:
                 assert len(value) == value_len
