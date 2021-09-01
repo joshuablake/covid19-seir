@@ -10,3 +10,10 @@ old_code/
 .hypothesis/
 .pytest_cache/
 data/simulated/
+**.csv
+**.pdf
+**.html
+**.out
+**.json
+**/.ipynb_checkpoints/**
+**.npy
