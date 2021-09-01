@@ -302,7 +302,7 @@ class SingleRegionStratifiedSEIRCompartmental(BaseModel):
         )
         return gradient
 
-    def _single_step(self, start_state, B_t, dL, dI):
+    def _calc_linear_transition_matrix(self, dL, dI):
         # Change periods into rates per timestep
         sigma = 2./dL * self._dt
         gamma = 2./dI * self._dt
@@ -313,10 +313,11 @@ class SingleRegionStratifiedSEIRCompartmental(BaseModel):
         # Entering states
         states_entering = np.arange(1, linear_transitions.shape[0])
         linear_transitions[states_entering, states_entering-1] = transition_rates[:-1]
-        full_transitions = block_diag(linear_transitions, P_STEP * self._dt)
-        new_state = full_transitions @ start_state
+        return block_diag(linear_transitions, np.eye(P_STATES) + P_TRANSITIONS * self._dt)
 
-    
+
+    def _single_step(self, start_state, B_t, linear_transitions):
+        new_state = linear_transitions @ start_state
         currently_infected = self.get_compartment(start_state, "I1") + self.get_compartment(start_state, "I2")
         new_infections = self._dt * self.get_compartment(start_state, "S") * (B_t @ currently_infected)
         new_infections = np.minimum(self.get_compartment(start_state, "S"), new_infections)
@@ -354,6 +355,7 @@ class SingleRegionStratifiedSEIRCompartmental(BaseModel):
         nni = np.zeros((self.max_time, self.num_strata))
         prev = np.zeros((self.max_time, self.num_strata))
         prev_state, matrix_scaling = self._init_transmission(dL, dI, psir, i0, pi, matrices[0])
+        linear_transitions = self._calc_linear_transition_matrix(dL, dI)
         cur_state = prev_state
         matrices *= matrix_scaling / dI * beta.reshape(self._base_matrices.shape[0], 1, 1)
         prev_day = -1
@@ -366,7 +368,7 @@ class SingleRegionStratifiedSEIRCompartmental(BaseModel):
                 steps_since_day_change = 1
                 prev_day = day_num
             B_t = matrices[self._beta_of_step[i]]
-            cur_state = self._single_step(cur_state, B_t, dL, dI)
+            cur_state = self._single_step(cur_state, B_t, linear_transitions)
             nni[day_num] += self.get_compartment(prev_state, "S") - self.get_compartment(cur_state, "S")
             # Build up average day-by-day without assuming number of steps per day
             prev[day_num] = (sum(cur_state[-(P_STATES-1):]) + prev[day_num] * (steps_since_day_change - 1)) / steps_since_day_change

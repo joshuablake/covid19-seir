@@ -133,7 +133,8 @@ def test_single_step_no_infections_full_move_dt_half(start_state, dt):
     max_time = max(2 * dt, 2)
     num_matrices = int((max_time - dt) // dt) + 1
     model = SingleRegionStratifiedSEIRCompartmental(np.ones((num_matrices, n_strata, n_strata)), max_time, dt, beta_step_spacing=dt)
-    final_state = model._single_step(start_state, np.zeros((n_strata, n_strata)), 2*dt, 2*dt)
+    linear_transitions = model._calc_linear_transition_matrix(2*dt, 2*dt)
+    final_state = model._single_step(start_state, np.zeros((n_strata, n_strata)), linear_transitions)
     assert model.check_state(final_state)
     expected = np.vstack((
         model.get_compartment(start_state, "S"), # S
@@ -156,7 +157,8 @@ def test_reduction_in_S(config, dt):
     max_time = 20 * dt
     num_matrices = int((max_time - dt) // dt) + 1
     model = SingleRegionStratifiedSEIRCompartmental(np.ones((num_matrices, n_strata, n_strata)), max_time, dt, beta_step_spacing=dt)
-    final_state = model._single_step(start_state, B_t, 2*dt, 2*dt)
+    linear_transitions = model._calc_linear_transition_matrix(2*dt, 2*dt)
+    final_state = model._single_step(start_state, B_t, linear_transitions)
     assert model.check_state(final_state)
     actual_reduction = model.get_compartment(start_state, "S") - model.get_compartment(final_state, "S")
     inital_infected = model.get_compartment(start_state, "I1") + model.get_compartment(start_state, "I2")
@@ -187,10 +189,14 @@ def test_simulate_epidemic(dt_over_1, beta, B, psir, i0, data):
     dI = data.draw(st.floats(min_value=dt*4, max_value=dI_max, exclude_max=True))
     pi = data.draw(arrays(np.float64, (n_strata,), elements=st.floats(min_value=0.5, max_value=1)))
     model = SingleRegionStratifiedSEIRCompartmental(B, max_time, dt, 90)
-    nni, prev, final_state = model.simulate(beta, dL, dI, psir, i0, pi, modifiers)
+    try:
+        nni, prev, final_state = model.simulate(beta, dL, dI, psir, i0, pi, modifiers)
+    except ValueError:
+        assume(False)
     num_recovered = model.get_compartment(final_state, "R")
     assert nni.shape == prev.shape == (max_time, n_strata)
     assert model.check_state(final_state)
+    assert (np.max(nni, axis=0) <= np.max(prev, axis=0)).all()
     assert (np.logical_or(0 < nni, np.isclose(nni, 0))).all()
     assert (nni < num_recovered).all()
     assert (np.logical_or(0 < prev, np.isclose(prev, 0))).all()
