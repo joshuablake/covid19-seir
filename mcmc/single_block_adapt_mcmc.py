@@ -44,8 +44,12 @@ class SingleBlockAMGS(object):
             # Copy the current whole parameter vector
             proposed = current.copy()
             # Update  parameters              
-            proposed = np.random.multivariate_normal(current,
-                        np.exp(self.scale) * self._cov_est)                   
+            try:
+                proposed = np.random.multivariate_normal(current,
+                        np.exp(self.scale) * self._cov_est)      
+            except np.linalg.linalg.LinAlgError as e:
+                e.chain = chain   
+                raise e
 
             # Evaluate the logP if first iteration of the chain            
             if i==0:
