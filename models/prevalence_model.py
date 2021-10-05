@@ -349,7 +349,7 @@ class SingleRegionStratifiedSEIRCompartmental(BaseModel):
         assert matrix_modifiers.shape[0] == matrix_modifiers.shape[1] == self.num_strata
         assert len(beta) == self.num_betas
 
-        beta = np.insert(beta, 0, 1) # First beta is always 0
+        beta = np.insert(beta, 0, 1) # First beta is always 1
         matrices =  self._base_matrices * matrix_modifiers
 
         nni = np.zeros((self.max_time, self.num_strata))
