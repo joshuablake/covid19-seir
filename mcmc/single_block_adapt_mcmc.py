@@ -23,7 +23,10 @@ class SingleBlockAMGS(object):
         self._cov_est[self._cov_est == 0] = 1
         self._cov_est = np.diag(0.01 * self._cov_est)
         
-    def run(self):
+    def run(self, return_log_target=False, record_diagnostics=False):
+        if record_diagnostics:
+            return_log_target = True
+        
         # Report the current settings
         if self._verbose:
             print('Running AMGS')
@@ -33,8 +36,15 @@ class SingleBlockAMGS(object):
         current = self._x0
 
         # Chain of stored samples
-        chain = np.zeros((self._iterations, self._target.n_params))
-        chain_log_target = np.zeros(self._iterations)
+        chain = np.empty((self._iterations, self._target.n_params))
+        chain_log_target = np.empty(self._iterations)
+
+        if record_diagnostics:
+            # Chains of diagnostics
+            mean_chain = np.empty((self._iterations - 200, self._target.n_params))
+            scale_chain = np.empty(self._iterations - 200)
+            cov_chain = np.empty_like(scale_chain)
+            cov_matrix_chain = np.empty((self._iterations-200, self._target.n_params, self._target.n_params))
 
         # Initial acceptance rate
         acceptance = 0
@@ -48,7 +58,10 @@ class SingleBlockAMGS(object):
                 proposed = np.random.multivariate_normal(current,
                         np.exp(self.scale) * self._cov_est)      
             except np.linalg.linalg.LinAlgError as e:
-                e.chain = chain   
+                e.chain = chain
+                e.final_iteration = i - 1
+                if record_diagnostics:
+                    e.diag = chain_log_target, mean_chain, cov_chain, scale_chain, cov_matrix_chain
                 raise e
 
             # Evaluate the logP if first iteration of the chain            
@@ -92,6 +105,12 @@ class SingleBlockAMGS(object):
                 # Adapt proposal covariances
                 self._cov_est = (1-learning_rate) * self._cov_est + \
                     learning_rate*(np.outer(difference, difference))
+
+                if record_diagnostics:
+                    mean_chain[i-200] = self._mean_est
+                    cov_chain[i-200] = np.linalg.cond(self._cov_est)
+                    scale_chain[i-200] = self.scale
+                    cov_matrix_chain[i-200] = self._cov_est
                         
             # Store the current
             chain[i,:] = current 
@@ -103,6 +122,12 @@ class SingleBlockAMGS(object):
                 #print('Regional  beta: ' + str(np.exp(self.globalscale)))
                 if i>100:
                     print('Log target: ', np.mean(chain_log_target[i-100:i]))
+
+        if record_diagnostics:
+            return chain, chain_log_target, mean_chain, cov_chain, scale_chain, cov_matrix_chain
+
+        if return_log_target:
+            return chain, chain_log_target
 
         return chain
     
