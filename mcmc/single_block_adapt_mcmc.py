@@ -71,6 +71,31 @@ class AMGSBlock(object):
             return proposed, proposed_log_target
         return current, current_log_target
 
+class UpdateRWSD(object):
+    def __init__(self, rw_param):
+        self._rw_param = rw_param
+        self.acceptance = 0
+
+    def do_update(self, iteration_num, current, current_log_target):
+        current_rw = current[-len(self._rw_param):]
+        sd_param = self._rw_param.sd_param
+        sd_len = self._rw_param.sd_len
+        current_sd = current_rw[:sd_len]
+        proposal_sd = sd_param.draw_from_prior()
+        proposal_rw = current_rw.copy()
+        proposal_rw[:sd_len] = proposal_sd
+        log_target_diff = self._rw_param.log_prior_jacobian(proposal_rw) - self._rw_param.log_prior_jacobian(current_rw)
+        log_kernel = sd_param.log_prior_jacobian(current_sd) - sd_param.log_prior_jacobian(proposal_sd)
+        log_accept_ratio = log_target_diff + log_kernel
+        accepted = log_accept_ratio > np.log(np.random.rand(1))
+        if accepted:
+            self.acceptance = (iteration_num * self.acceptance + 1) / (iteration_num + 1)
+            current[-len(self._rw_param):] = proposal_rw
+            return current, current_log_target + log_target_diff
+        else:
+            self.acceptance = (iteration_num * self.acceptance) / (iteration_num + 1)
+            return current, current_log_target
+
 
 class SingleBlockAMGS(object):
     def __init__(self, target, x0, mean_est=None, iterations=150000):
@@ -154,3 +179,34 @@ class SingleBlockAMGS(object):
             raise ValueError("Posterior density not finite at starting value")
         return amgs_block
     
+class AMGSWithRWSDUpdate(SingleBlockAMGS):
+    def __init__(self, target, x0, mean_est=None, iterations=150000):
+        assert list(target._model_params.keys())[-1] == "beta"
+        self._len_rw_params = len(target._model_params["beta"])
+        super().__init__(target, x0, mean_est=mean_est, iterations=iterations)
+
+    def run(self, return_log_target=False, record_diagnostics=False):
+        if record_diagnostics:
+            return_log_target = True
+        self._return_log_target = return_log_target
+        self._record_diagnostics = record_diagnostics
+
+        amgs_block = self._loop_init()
+        sd_update = UpdateRWSD(self._target._model_params["beta"])
+
+        for i in range(self._iterations):           
+            self.safe_amgs_update(amgs_block, i)
+            self.current, self.current_log_target = sd_update.do_update(i, self.current, self.current_log_target)   
+
+            # Store the current
+            self.chain[i,:] = self.current 
+            self.chain_log_target[i] = self.current_log_target
+            self._print_progress(amgs_block, sd_update, i)
+
+        return self._get_return_value(amgs_block)
+
+    def _print_progress(self, amgs_block, sd_update, i):
+        super()._print_progress(amgs_block, i)
+        # Print-outs
+        if self._verbose and ((i % 2000 == 0) or (i==self._iterations-1)):
+            print(f"SD acceptance rate {sd_update.acceptance}")
