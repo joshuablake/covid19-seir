@@ -66,28 +66,28 @@ class ExpAfterPrior(ParamTransformAfterPrior):
 
 class LogGaussianRWParamSD(Param):
     def __init__(self, sd_param, walk_length=None):
-        self._sd_param = sd_param
+        self.sd_param = sd_param
         self.walk_length = walk_length
-        self._sd_len = len(sd_param)
+        self.sd_len = len(sd_param)
 
     def __len__(self):
-        return self.walk_length + self._sd_len
+        return self.walk_length + self.sd_len
 
     def log_prior_jacobian(self, value):
-        sd_params = value[0:self._sd_len]
-        log_walk_increments = value[self._sd_len:]
-        log_sd_prior = self._sd_param.log_prior_jacobian(sd_params)
-        sd = self._sd_param.sample_to_value(sd_params)
+        sd_params = value[0:self.sd_len]
+        log_walk_increments = value[self.sd_len:]
+        log_sd_prior = self.sd_param.log_prior_jacobian(sd_params)
+        sd = self.sd_param.sample_to_value(sd_params)
         log_walk_density = stats.norm.logpdf(log_walk_increments, 0.0, sd).sum()
         return log_sd_prior + log_walk_density
 
     def sample_to_value(self, value):
-        log_walk_increments = value[self._sd_len:]
+        log_walk_increments = value[self.sd_len:]
         return np.exp(log_walk_increments.cumsum())
 
     def draw_from_prior(self):
         sd_params = self._sd_prior.draw_from_prior()
-        sd = self._sd_param.sample_to_value(sd_params)
+        sd = self.sd_param.sample_to_value(sd_params)
         log_walk_increments = stats.norm.rvs(size=self.walk_length, scale=sd)
         return np.insert(log_walk_increments, 0, sd_params)
 
