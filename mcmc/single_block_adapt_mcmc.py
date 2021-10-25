@@ -6,8 +6,10 @@ import scipy.stats as stats
 import time
 
 class AMGSBlock(object):
-    def __init__(self, target, mean_est, record_diagnostics, iterations):
-        assert len(mean_est) == target.n_params
+    def __init__(self, target, mean_est, record_diagnostics, iterations, n_params=None):
+        if n_params is None:
+            n_params = target.n_params
+        assert len(mean_est) == n_params
         self._target = target
 
         self._verbose = True
@@ -23,10 +25,10 @@ class AMGSBlock(object):
 
         if record_diagnostics:
             # Chains of diagnostics
-            self.mean_chain = np.empty((iterations - 200, self._target.n_params))
+            self.mean_chain = np.empty((iterations - 200, n_params))
             self.scale_chain = np.empty(iterations - 200)
             self.cov_chain = np.empty_like(self.scale_chain)
-            self.cov_matrix_chain = np.empty((iterations-200, self._target.n_params, self._target.n_params))
+            self.cov_matrix_chain = np.empty((iterations-200, n_params, n_params))
 
     def do_update(self, iteration_num, current, current_log_target):
         # Update  parameters              
@@ -96,13 +98,38 @@ class UpdateRWSD(object):
             self.acceptance = (iteration_num * self.acceptance) / (iteration_num + 1)
             return current, current_log_target
 
+class UpdateRWSDGaussianProposal(object):
+    def __init__(self, rw_param, proposal_std=0.006):
+        self._rw_param = rw_param
+        self._proposal_std = proposal_std
+        self.acceptance = 0
+
+    def do_update(self, iteration_num, current, current_log_target):
+        current_rw = current[-len(self._rw_param):]
+        sd_len = self._rw_param.sd_len
+        current_sd = current_rw[:sd_len]
+        proposal_sd = np.random.normal(current_sd, self._proposal_std)
+        proposal_rw = current_rw.copy()
+        proposal_rw[:sd_len] = proposal_sd
+        log_target_diff = self._rw_param.log_prior_jacobian(proposal_rw) - self._rw_param.log_prior_jacobian(current_rw)
+        accepted = log_target_diff > np.log(np.random.rand(1))
+        if accepted:
+            self.acceptance = (iteration_num * self.acceptance + 1) / (iteration_num + 1)
+            current[-len(self._rw_param):] = proposal_rw
+            return current, current_log_target + log_target_diff
+        else:
+            self.acceptance = (iteration_num * self.acceptance) / (iteration_num + 1)
+            return current, current_log_target
+
 
 class SingleBlockAMGS(object):
-    def __init__(self, target, x0, mean_est=None, iterations=150000):
+    def __init__(self, target, x0, mean_est=None, iterations=150000, n_params=None):
         if mean_est is None:
             mean_est = x0
-        assert len(x0) == target.n_params
-        assert len(mean_est) == target.n_params
+        if n_params is None:
+            n_params = target.n_params
+        assert len(mean_est) == n_params
+        assert len(x0) == n_params
         self._target = target
         self._iterations = iterations
         self._x0 = np.array(x0)
@@ -158,8 +185,10 @@ class SingleBlockAMGS(object):
             if i>100:
                 print('Log target: ', np.mean(self.chain_log_target[i-100:i]))
 
-    def _loop_init(self):
-        amgs_block = AMGSBlock(self._target, self._mean_est, self._record_diagnostics, self._iterations)
+    def _loop_init(self, amgs_target=None):
+        if amgs_target is None:
+            amgs_target = self._target
+        amgs_block = AMGSBlock(amgs_target, self._mean_est, self._record_diagnostics, self._iterations)
         
         # Report the current settings
         if self._verbose:
@@ -179,20 +208,21 @@ class SingleBlockAMGS(object):
             raise ValueError("Posterior density not finite at starting value")
         return amgs_block
     
+# WARNING: this is invalid if using a non-centred parameterisation
 class AMGSWithRWSDUpdate(SingleBlockAMGS):
     def __init__(self, target, x0, mean_est=None, iterations=150000):
         assert list(target._model_params.keys())[-1] == "beta"
         self._len_rw_params = len(target._model_params["beta"])
         super().__init__(target, x0, mean_est=mean_est, iterations=iterations)
 
-    def run(self, return_log_target=False, record_diagnostics=False):
+    def run(self, sd_update_object=UpdateRWSD, return_log_target=False, record_diagnostics=False):
         if record_diagnostics:
             return_log_target = True
         self._return_log_target = return_log_target
         self._record_diagnostics = record_diagnostics
 
         amgs_block = self._loop_init()
-        sd_update = UpdateRWSD(self._target._model_params["beta"])
+        sd_update = sd_update_object(self._target._model_params["beta"])
 
         for i in range(self._iterations):           
             self.safe_amgs_update(amgs_block, i)
@@ -200,6 +230,64 @@ class AMGSWithRWSDUpdate(SingleBlockAMGS):
 
             # Store the current
             self.chain[i,:] = self.current 
+            self.chain_log_target[i] = self.current_log_target
+            self._print_progress(amgs_block, sd_update, i)
+
+        return self._get_return_value(amgs_block)
+
+    def _print_progress(self, amgs_block, sd_update, i):
+        super()._print_progress(amgs_block, i)
+        # Print-outs
+        if self._verbose and ((i % 2000 == 0) or (i==self._iterations-1)):
+            print(f"SD acceptance rate {sd_update.acceptance}")
+
+# Wrap a target but hold the value of one parameter fixed
+class _TargetOmitValue(object):
+    def __init__(self, underlying_target, position_to_fix, fixed_value_start, fixed_param):
+        self._target = underlying_target
+        self.n_params = self._target.n_params - 1
+        self.position_to_fix = position_to_fix
+        self._fixed_param = fixed_param
+        self._fixed_value = self._fixed_param.sample_to_value(fixed_value_start)
+
+    def __call__(self, value):
+        value = np.insert(value, self.position_to_fix, self._fixed_value)
+        return self._target(value)
+
+    def set_fixed_value(self, value):
+        self._fixed_value = self._fixed_param.sample_to_value(value)
+    
+# WARNING: this is invalid if using a non-centred parameterisation
+# Update the standard deviation outside of the AMGS block only
+class AMGSWithIndepedendentRWSDUpdate(SingleBlockAMGS):
+    def __init__(self, target, x0, iterations=150000):
+        assert list(target._model_params.keys())[-1] == "beta"
+        self.sd_position = -len(target._model_params["beta"])
+        self.sd_start = x0[self.sd_position]
+        x0_exclude_sd = np.delete(x0, self.sd_position)
+        sd_param = target._model_params["beta"].sd_param
+        self.amgs_target = _TargetOmitValue(target, self.sd_position, self.sd_start, sd_param)
+        super().__init__(self.amgs_target, x0_exclude_sd, iterations=iterations)
+
+    def run(self, sd_update_object=UpdateRWSD, return_log_target=False, record_diagnostics=False):
+        if record_diagnostics:
+            return_log_target = True
+        self._return_log_target = return_log_target
+        self._record_diagnostics = record_diagnostics
+
+        amgs_block = self._loop_init()
+        sd_update = sd_update_object(self._target._target._model_params["beta"])
+        sd_current = self.sd_start
+
+        for i in range(self._iterations):
+            self.amgs_target.set_fixed_value(sd_current)   
+            self.safe_amgs_update(amgs_block, i)
+            all_params = np.insert(self.current, self.sd_position, sd_current)
+            all_params, self.current_log_target = sd_update.do_update(i, self.current, self.current_log_target)   
+            sd_current = all_params[self.sd_position]
+
+            # Store the current
+            self.chain[i,:] = all_params
             self.chain_log_target[i] = self.current_log_target
             self._print_progress(amgs_block, sd_update, i)
 
