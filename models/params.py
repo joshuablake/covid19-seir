@@ -86,7 +86,7 @@ class LogGaussianRWParamSD(Param):
         return np.exp(log_walk_increments.cumsum())
 
     def draw_from_prior(self):
-        sd_params = self._sd_prior.draw_from_prior()
+        sd_params = self.sd_param.draw_from_prior()
         sd = self.sd_param.sample_to_value(sd_params)
         log_walk_increments = stats.norm.rvs(size=self.walk_length, scale=sd)
         return np.insert(log_walk_increments, 0, sd_params)
@@ -95,6 +95,57 @@ class LogGaussianRW(LogGaussianRWParamSD):
     def __init__(self, sd_prior, walk_length=None):
         sd_param = Param(sd_prior)
         super().__init__(sd_param, walk_length)
+
+class LogGaussianRWNonCentred(LogGaussianRWParamSD):
+    def __init__(self, sd_prior, walk_length=None, sample_log_scale=False):
+        if sample_log_scale:
+            sd_param = SampleLogScale(Param(sd_prior))
+        else:
+            sd_param = Param(sd_prior)
+        super().__init__(sd_param, walk_length)
+        assert self.sd_len == 1
+
+    def log_prior_jacobian(self, value):
+        sd_param = value[0]
+        log_walk_increments = value[1:]
+        log_sd_prior = self.sd_param.log_prior_jacobian(sd_param)
+        log_walk_density = stats.norm.logpdf(log_walk_increments).sum()
+        return log_sd_prior + log_walk_density
+
+    def sample_to_value(self, value):
+        sd_param = value[0]
+        sd = self.sd_param.sample_to_value(sd_param)
+        log_walk_increments = value[1:] * sd
+        return np.exp(log_walk_increments.cumsum())
+
+    def draw_from_prior(self):
+        sd_params = self._sd_prior.draw_from_prior()
+        log_walk_increments = stats.norm.rvs(size=self.walk_length)
+        return np.insert(log_walk_increments, 0, sd_params)
+
+# Infer only sigma (epsilons known)
+class LogGaussianRWNonCentredInferSigma(LogGaussianRWParamSD):
+    def __init__(self, sd_prior, log_walk_increments, sample_log_scale=False):
+        self.log_walk_increments = log_walk_increments
+        if sample_log_scale:
+            sd_param = SampleLogScale(Param(sd_prior))
+        else:
+            sd_param = Param(sd_prior)
+        super().__init__(sd_param, len(log_walk_increments))
+
+    def log_prior_jacobian(self, value):
+        return self.sd_param.log_prior_jacobian(value)
+
+    def sample_to_value(self, value):
+        sd_param = value
+        sd = self.sd_param.sample_to_value(sd_param)
+        return np.exp(self.log_walk_increments.cumsum() * sd)
+
+    def draw_from_prior(self):
+        return self._sd_prior.draw_from_prior()
+
+    def __len__(self):
+        return len(self.sd_param)
 
 class LogGaussianRWFixedSD(LogGaussianRWParamSD):
     def __init__(self, sd_prior, walk_length=None):
@@ -116,6 +167,21 @@ class _ExtendParam(Param):
 
     def draw_from_prior(self):
         return self._param.draw_from_prior()
+
+class SampleLogScale(_ExtendParam):
+    def log_prior_jacobian(self, value):
+        natural_value = np.exp(value)
+        log_prior = super().log_prior_jacobian(natural_value)
+        log_jacobian = value
+        return log_prior + log_jacobian
+
+    def sample_to_value(self, value):
+        return super().sample_to_value(np.exp(value))
+
+    def draw_from_prior(self):
+        return np.log(super().draw_from_prior())
+
+
 
 class MatrixSusceptibleChildren(_ExtendParam):
     def __init__(self, param, n_strata, n_children_strata):
