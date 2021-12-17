@@ -99,7 +99,7 @@ class UpdateRWSD(object):
             return current, current_log_target
 
 class UpdateRWSDGaussianProposal(object):
-    def __init__(self, rw_param, proposal_std=0.006):
+    def __init__(self, rw_param, proposal_std=0.8):
         self._rw_param = rw_param
         self._proposal_std = proposal_std
         self.acceptance = 0
@@ -246,7 +246,7 @@ class _TargetOmitValue(object):
     def __init__(self, underlying_target, position_to_fix, fixed_value_start, fixed_param):
         self._target = underlying_target
         self.n_params = self._target.n_params - 1
-        self.position_to_fix = position_to_fix
+        self.position_to_fix = position_to_fix + 1
         self._fixed_param = fixed_param
         self._fixed_value = self._fixed_param.sample_to_value(fixed_value_start)
 
@@ -269,7 +269,7 @@ class AMGSWithIndepedendentRWSDUpdate(SingleBlockAMGS):
         self.amgs_target = _TargetOmitValue(target, self.sd_position, self.sd_start, sd_param)
         super().__init__(self.amgs_target, x0_exclude_sd, iterations=iterations)
 
-    def run(self, sd_update_object=UpdateRWSD, return_log_target=False, record_diagnostics=False):
+    def run(self, sd_update_object=UpdateRWSDGaussianProposal, return_log_target=False, record_diagnostics=False):
         if record_diagnostics:
             return_log_target = True
         self._return_log_target = return_log_target
@@ -278,12 +278,15 @@ class AMGSWithIndepedendentRWSDUpdate(SingleBlockAMGS):
         amgs_block = self._loop_init()
         sd_update = sd_update_object(self._target._target._model_params["beta"])
         sd_current = self.sd_start
+        true_chain_shape = list(self.chain.shape)
+        true_chain_shape[1] += 1
+        self.chain = np.empty(true_chain_shape)
 
         for i in range(self._iterations):
             self.amgs_target.set_fixed_value(sd_current)   
             self.safe_amgs_update(amgs_block, i)
-            all_params = np.insert(self.current, self.sd_position, sd_current)
-            all_params, self.current_log_target = sd_update.do_update(i, self.current, self.current_log_target)   
+            all_params = np.insert(self.current, self.sd_position+1, sd_current)
+            all_params, self.current_log_target = sd_update.do_update(i, all_params, self.current_log_target)   
             sd_current = all_params[self.sd_position]
 
             # Store the current
