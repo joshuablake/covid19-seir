@@ -94,12 +94,19 @@ class LogPosteriorOneRegion(object):
 
 class LogPosteriorStratifiedRegion(LogPosteriorOneRegion):
     def __init__(self, forward_model, positive_num, test_num, priors):
+
         if positive_num is None:
             assert test_num is None
             positives = []
             tests = []
         else:
-            assert positive_num.shape == test_num.shape == (forward_model.max_time, forward_model.num_strata)
+            try:
+                num_strata = forward_model.num_strata
+            except AttributeError:
+                # One strata assumed
+                assert len(positive_num) == len(test_num) == forward_model.max_time
+            else:
+                assert positive_num.shape == test_num.shape == (forward_model.max_time, num_strata)
             assert (positive_num >= 0).all()
             assert (test_num >= 0).all()
             assert (positive_num <= test_num).all()
