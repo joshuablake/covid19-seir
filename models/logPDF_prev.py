@@ -117,3 +117,37 @@ class LogPosteriorStratifiedRegion(LogPosteriorOneRegion):
 
     def _log_lik(self, results):
         return sum(stats.binom.logpmf(self._positives, self._tests, results[1][self._results_index]))
+
+class LogPosteriorBetaBinomial(LogPosteriorStratifiedRegion):
+    def __call__(self, parameters):
+        try:
+            result, log_prior, theta = self.simulate(parameters, True, True)
+        except ValueError:
+            return -Inf
+        log_lik = self._log_lik(result, theta)
+        return log_lik + log_prior
+
+    def simulate(self, parameters, include_log_prior=False, return_theta=False):
+        assert len(parameters) == self.n_params
+        log_prior, param_values = self.param_array_to_dict(parameters)
+        theta = param_values["theta"]
+        del param_values["theta"]
+        result = self._forward_model.simulate(**param_values)
+        return_val = [result]
+        if include_log_prior:
+            return_val.append(log_prior)
+        if return_theta:
+            return_val.append(theta)
+        return tuple(return_val)
+
+    """Parameterisation of Hughes and Madden (1993)"""
+    def _log_lik(self, results, theta):
+        if not np.isscalar(theta):
+            assert len(theta) == 1
+            theta = theta[0]
+        n = self._tests
+        k = self._positives
+        pi = results[1][self._results_index]
+        alpha = pi / theta
+        beta = (1 - pi) / theta
+        return sum(stats.betabinom.logpmf(k=k, n=n, a=alpha, b=beta))
