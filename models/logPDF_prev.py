@@ -37,16 +37,18 @@ class LogPosteriorOneRegion(object):
             result, log_prior = self.simulate(parameters, True)
         except ValueError:
             return -Inf
-
-        # Now calculate the individual data stream log Likelihoods
         log_lik = self._log_lik(result)
-
         return log_lik + log_prior
 
     def simulate(self, parameters, include_log_prior=False):
         assert len(parameters) == self.n_params
+        log_prior, param_values = self.param_array_to_dict(parameters)    
+        result = self._forward_model.simulate(**param_values)
+        if include_log_prior:
+            return result, log_prior
+        return result
 
-        # Parse array of parameters into dict for forward model
+    def param_array_to_dict(self, parameters):
         log_prior = 0
         idx = 0
         param_values = {}
@@ -57,11 +59,7 @@ class LogPosteriorOneRegion(object):
             log_prior += config.log_prior_jacobian(values)
             param_values[name] = config.sample_to_value(values)
             idx = end_idx
-    
-        result = self._forward_model.simulate(**param_values)
-        if include_log_prior:
-            return result, log_prior
-        return result
+        return log_prior,param_values
 
 
     def param_value_dict_to_array(self, values):
