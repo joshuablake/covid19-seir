@@ -1,5 +1,6 @@
 import numpy as np
 from scipy import stats
+from scipy.special import expit, logit
 
 class VectorParam(object):
     def __init__(self, length, prior):
@@ -180,6 +181,20 @@ class SampleLogScale(_ExtendParam):
 
     def draw_from_prior(self):
         return np.log(super().draw_from_prior())
+
+
+class SampleLogitScale(_ExtendParam):
+    def log_prior_jacobian(self, value):
+        natural_value = expit(value)
+        log_prior = super().log_prior_jacobian(natural_value)
+        log_jacobian = sum(value - 2 * np.log(np.exp(value) + 1))
+        return log_prior + log_jacobian
+
+    def sample_to_value(self, value):
+        return super().sample_to_value(expit(value))
+
+    def draw_from_prior(self):
+        return logit(super().draw_from_prior())
 
 
 
