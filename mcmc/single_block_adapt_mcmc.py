@@ -6,7 +6,12 @@ import scipy.stats as stats
 import time
 
 class AMGSBlock(object):
-    def __init__(self, target, mean_est, record_diagnostics, iterations, n_params=None):
+    def __init__(self, target, mean_est, record_diagnostics, iterations, n_params=None, stop_adapting=None):
+        if stop_adapting is None:
+            self._stop_adapting = iterations
+        else:
+            self._stop_adapting = stop_adapting
+        
         if n_params is None:
             n_params = target.n_params
         assert len(mean_est) == n_params
@@ -47,7 +52,7 @@ class AMGSBlock(object):
         self.acceptance = (iteration_num * self.acceptance + float(accepted)) / (iteration_num + 1)
 
         # Start the adaptations
-        if iteration_num > 199:
+        if iteration_num > 199 and iteration_num < self._stop_adapting:
             learning_rate = (iteration_num - 199 + 1.0) ** -0.6
 
             # Adapt proposal scales
@@ -123,7 +128,7 @@ class UpdateRWSDGaussianProposal(object):
 
 
 class SingleBlockAMGS(object):
-    def __init__(self, target, x0, mean_est=None, iterations=150000, n_params=None):
+    def __init__(self, target, x0, mean_est=None, iterations=150000, n_params=None, stop_adapting=None):
         if mean_est is None:
             mean_est = x0
         if n_params is None:
@@ -138,6 +143,8 @@ class SingleBlockAMGS(object):
 
         self.scale = 0.0
         self._mean_est = np.array(mean_est)
+
+        self._stop_adapting = stop_adapting
 
     def _get_return_value(self, amgs_block):
         if self._record_diagnostics:
@@ -188,7 +195,7 @@ class SingleBlockAMGS(object):
     def _loop_init(self, amgs_target=None):
         if amgs_target is None:
             amgs_target = self._target
-        amgs_block = AMGSBlock(amgs_target, self._mean_est, self._record_diagnostics, self._iterations)
+        amgs_block = AMGSBlock(amgs_target, self._mean_est, self._record_diagnostics, self._iterations, stop_adapting=self._stop_adapting)
         
         # Report the current settings
         if self._verbose:
@@ -210,10 +217,10 @@ class SingleBlockAMGS(object):
     
 # WARNING: this is invalid if using a non-centred parameterisation
 class AMGSWithRWSDUpdate(SingleBlockAMGS):
-    def __init__(self, target, x0, mean_est=None, iterations=150000):
+    def __init__(self, target, x0, mean_est=None, iterations=150000, stop_adaption=None):
         assert list(target._model_params.keys())[-1] == "beta"
         self._len_rw_params = len(target._model_params["beta"])
-        super().__init__(target, x0, mean_est=mean_est, iterations=iterations)
+        super().__init__(target, x0, mean_est=mean_est, iterations=iterations, stop_adaption=stop_adaption)
 
     def run(self, sd_update_object=UpdateRWSD, return_log_target=False, record_diagnostics=False):
         if record_diagnostics:
@@ -260,14 +267,14 @@ class _TargetOmitValue(object):
 # WARNING: this is invalid if using a non-centred parameterisation
 # Update the standard deviation outside of the AMGS block only
 class AMGSWithIndepedendentRWSDUpdate(SingleBlockAMGS):
-    def __init__(self, target, x0, iterations=150000):
+    def __init__(self, target, x0, iterations=150000, stop_adaption=None):
         assert list(target._model_params.keys())[-1] == "beta"
         self.sd_position = -len(target._model_params["beta"])
         self.sd_start = x0[self.sd_position]
         x0_exclude_sd = np.delete(x0, self.sd_position)
         sd_param = target._model_params["beta"].sd_param
         self.amgs_target = _TargetOmitValue(target, self.sd_position, self.sd_start, sd_param)
-        super().__init__(self.amgs_target, x0_exclude_sd, iterations=iterations)
+        super().__init__(self.amgs_target, x0_exclude_sd, iterations=iterations, stop_adapting=stop_adaption)
 
     def run(self, sd_update_object=UpdateRWSDGaussianProposal, return_log_target=False, record_diagnostics=False):
         if record_diagnostics:
