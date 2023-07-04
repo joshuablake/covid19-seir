@@ -120,7 +120,7 @@ class LogGaussianRWNonCentred(LogGaussianRWParamSD):
         return np.exp(log_walk_increments.cumsum())
 
     def draw_from_prior(self, random_state=None):
-        sd_params = self._sd_prior.draw_from_prior(random_state)
+        sd_params = self.sd_param.draw_from_prior(random_state)
         log_walk_increments = stats.norm.rvs(size=self.walk_length, random_state=random_state)
         return np.insert(log_walk_increments, 0, sd_params)
 
@@ -143,7 +143,7 @@ class LogGaussianRWNonCentredInferSigma(LogGaussianRWParamSD):
         return np.exp(self.log_walk_increments.cumsum() * sd)
 
     def draw_from_prior(self, random_state=None):
-        return self._sd_prior.draw_from_prior(random_state)
+        return self.sd_param.draw_from_prior(random_state)
 
     def __len__(self):
         return len(self.sd_param)
