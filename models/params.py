@@ -16,7 +16,7 @@ class VectorParam(object):
     def sample_to_value(self, value):
         return value
 
-    def draw_from_prior(self):
+    def draw_from_prior(self, random_state=None):
         raise NotImplementedError
 
 class VectorParamMultiplePriors(VectorParam):
@@ -27,15 +27,15 @@ class VectorParamMultiplePriors(VectorParam):
     def log_prior_jacobian(self, value):
         return sum(self._prior[i].logpdf(val) for i, val in enumerate(value))
 
-    def draw_from_prior(self):
-        return np.array([self._prior[i].rvs(1) for i in range(self._length)]).flatten()
+    def draw_from_prior(self, random_state=None):
+        return np.array([self._prior[i].rvs(1, random_state=random_state) for i in range(self._length)]).flatten()
 
 class Param(VectorParam):
     def __init__(self, prior):
         super().__init__(1, prior)
 
-    def draw_from_prior(self):
-        return self._prior.rvs(1)
+    def draw_from_prior(self, random_state=None):
+        return self._prior.rvs(1, random_state=random_state)
 
 class FixedParam(Param):
     def __init__(self, value):
@@ -50,7 +50,7 @@ class FixedParam(Param):
     def log_prior_jacobian(self, value):
         return 0
 
-    def draw_from_prior(self):
+    def draw_from_prior(self, random_state=None):
         return np.array([])
 
 class ParamTransformAfterPrior(Param):
@@ -86,10 +86,10 @@ class LogGaussianRWParamSD(Param):
         log_walk_increments = value[self.sd_len:]
         return np.exp(log_walk_increments.cumsum())
 
-    def draw_from_prior(self):
-        sd_params = self.sd_param.draw_from_prior()
+    def draw_from_prior(self, random_state=None):
+        sd_params = self.sd_param.draw_from_prior(random_state)
         sd = self.sd_param.sample_to_value(sd_params)
-        log_walk_increments = stats.norm.rvs(size=self.walk_length, scale=sd)
+        log_walk_increments = stats.norm.rvs(size=self.walk_length, scale=sd, random_state=random_state)
         return np.insert(log_walk_increments, 0, sd_params)
 
 class LogGaussianRW(LogGaussianRWParamSD):
@@ -119,9 +119,9 @@ class LogGaussianRWNonCentred(LogGaussianRWParamSD):
         log_walk_increments = value[1:] * sd
         return np.exp(log_walk_increments.cumsum())
 
-    def draw_from_prior(self):
-        sd_params = self._sd_prior.draw_from_prior()
-        log_walk_increments = stats.norm.rvs(size=self.walk_length)
+    def draw_from_prior(self, random_state=None):
+        sd_params = self._sd_prior.draw_from_prior(random_state)
+        log_walk_increments = stats.norm.rvs(size=self.walk_length, random_state=random_state)
         return np.insert(log_walk_increments, 0, sd_params)
 
 # Infer only sigma (epsilons known)
@@ -142,8 +142,8 @@ class LogGaussianRWNonCentredInferSigma(LogGaussianRWParamSD):
         sd = self.sd_param.sample_to_value(sd_param)
         return np.exp(self.log_walk_increments.cumsum() * sd)
 
-    def draw_from_prior(self):
-        return self._sd_prior.draw_from_prior()
+    def draw_from_prior(self, random_state=None):
+        return self._sd_prior.draw_from_prior(random_state)
 
     def __len__(self):
         return len(self.sd_param)
@@ -166,8 +166,8 @@ class _ExtendParam(Param):
     def sample_to_value(self, value):
         return self._param.sample_to_value(value)
 
-    def draw_from_prior(self):
-        return self._param.draw_from_prior()
+    def draw_from_prior(self, random_state=None):
+        return self._param.draw_from_prior(random_state)
 
 class SampleLogScale(_ExtendParam):
     def log_prior_jacobian(self, value):
@@ -179,8 +179,8 @@ class SampleLogScale(_ExtendParam):
     def sample_to_value(self, value):
         return super().sample_to_value(np.exp(value))
 
-    def draw_from_prior(self):
-        return np.log(super().draw_from_prior())
+    def draw_from_prior(self, random_state=None):
+        return np.log(super().draw_from_prior(random_state))
 
 
 class SampleLogitScale(_ExtendParam):
@@ -193,8 +193,8 @@ class SampleLogitScale(_ExtendParam):
     def sample_to_value(self, value):
         return super().sample_to_value(expit(value))
 
-    def draw_from_prior(self):
-        return logit(super().draw_from_prior())
+    def draw_from_prior(self, random_state=None):
+        return logit(super().draw_from_prior(random_state))
 
 
 
