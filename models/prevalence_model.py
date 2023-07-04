@@ -266,11 +266,18 @@ class SingleRegionStratifiedSEIRCompartmental(BaseModel):
         s_init = 1 - i1_init - i2_init - e1_init - e2_init - r_init
         if np.logical_and(s_init < 0, np.logical_not(np.isclose(s_init, 0))).any():
             raise ValueError("Values of pi and i0 imply more than entire population")
-        p_init = np.zeros((len(self.STATE_NAMES) - 6, self.num_strata))
+        p_init = self._calculate_initial_prev_state(e1_init, sigma, alpha)
 
         init_state = np.vstack((s_init, e1_init, e2_init, i1_init, i2_init, r_init, p_init))
         assert self.check_state(init_state)
         return init_state, matrix_multiplier
+
+    def _calculate_initial_prev_state(self, e1_init, sigma, psir):
+        p_init = np.empty((P_STATES, self.num_strata))
+        p_init[0] = (sigma + psir) / (1 + -P_TRANSITIONS[1, 1]) * e1_init
+        for i in range(1, P_STATES):
+            p_init[i] = (P_TRANSITIONS[i, i-1] / -P_TRANSITIONS[i, i]) * p_init[i - 1]
+        return p_init
 
     def _calculate_gradient(self, start_state, beta_t, dL, dI):
         # Change periods into rates per timestep

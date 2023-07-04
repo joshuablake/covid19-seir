@@ -196,7 +196,7 @@ def test_simulate_epidemic(dt_over_1, beta, B, psir, i0, data):
     num_recovered = model.get_compartment(final_state, "R")
     assert nni.shape == prev.shape == (max_time, n_strata)
     assert model.check_state(final_state)
-    assert (np.max(nni, axis=0) <= np.max(prev, axis=0)).all()
+    assert (np.max(nni[1:], axis=0) <= np.max(prev[1:], axis=0)).all()
     assert (np.logical_or(0 < nni, np.isclose(nni, 0))).all()
     assert (nni < num_recovered).all()
     assert (np.logical_or(0 < prev, np.isclose(prev, 0))).all()
