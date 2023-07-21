@@ -23,6 +23,9 @@ class VectorParam(object):
     def sample_to_value(self, value):
         return value
 
+    def value_to_sample(self, sample):
+        return sample
+
     def draw_from_prior(self, random_state=None):
         raise NotImplementedError
 
@@ -64,24 +67,31 @@ class FixedParam(Param):
     def sample_to_value(self, value):
         return self._value
 
+    def value_to_sample(self, sample):
+        return np.array([])
+
     def log_prior_jacobian(self, value):
         return 0
 
     def draw_from_prior(self, random_state=None):
         return np.array([])
 
-class ParamTransformAfterPrior(Param):
-    def __init__(self, prior, transformation):
+class _ParamTransformAfterPrior(Param):
+    def __init__(self, prior, transformation, reverse_transformation):
         self._transformation = transformation
+        self._reverse_transformation = reverse_transformation
         super().__init__(prior)
 
     def sample_to_value(self, value):
         return self._transformation(value)
 
+    def value_to_sample(self, sample):
+        return self._reverse_transformation(sample)
+
 class ExpAfterPrior(_ParamTransformAfterPrior):
     """"A parameter which has its prior on the log scale, but is used by the model on the natural scale."""
     def __init__(self, prior):
-        super().__init__(prior, np.exp)
+        super().__init__(prior, np.exp, np.log)
 
 class LogGaussianRWParamSD(Param):
     """A Gaussian random walk on the log scale.
@@ -115,9 +125,20 @@ class LogGaussianRWParamSD(Param):
         log_walk_density = stats.norm.logpdf(log_walk_increments, 0.0, sd).sum()
         return log_sd_prior + log_walk_density
 
-    def sample_to_value(self, value):
-        log_walk_increments = value[self.sd_len:]
+    def sample_to_value(self, sample):
+        log_walk_increments = sample[self.sd_len:]
         return np.exp(log_walk_increments.cumsum())
+
+    def value_to_sample(self, value, sd_value=None):
+        """Information is lost (on the standard deviation when converting to a sample)"""
+        if sd_value is None:
+            raise NotImplementedError()
+        sd_sample = self.sd_param.value_to_sample(sd_value)
+        walk_sample = np.diff(
+            np.log(value),
+            prepend=[0]
+        )
+        return np.insert(walk_sample, 0, sd_sample)
 
     def draw_from_prior(self, random_state=None):
         sd_params = self.sd_param.draw_from_prior(random_state)
@@ -154,16 +175,27 @@ class LogGaussianRWNonCentred(LogGaussianRWParamSD):
         log_walk_density = stats.norm.logpdf(log_walk_increments).sum()
         return log_sd_prior + log_walk_density
 
-    def sample_to_value(self, value):
-        sd_param = value[0]
+    def sample_to_value(self, sample):
+        sd_param = sample[0]
         sd = self.sd_param.sample_to_value(sd_param)
-        log_walk_increments = value[1:] * sd
+        log_walk_increments = sample[1:] * sd
         return np.exp(log_walk_increments.cumsum())
 
     def draw_from_prior(self, random_state=None):
         sd_params = self.sd_param.draw_from_prior(random_state)
         log_walk_increments = stats.norm.rvs(size=self.walk_length, random_state=random_state)
         return np.insert(log_walk_increments, 0, sd_params)
+
+    def value_to_sample(self, value, sd_value=None):
+        """Information is lost (on the standard deviation when converting to a sample)"""
+        if sd_value is None:
+            raise NotImplementedError()
+        sd_sample = self.sd_param.value_to_sample(sd_value)
+        walk_sample = np.diff(
+            np.log(value) / sd_value,
+            prepend=[0]
+        )
+        return np.insert(walk_sample, 0, sd_sample)
 
 class LogGaussianRWNonCentredInferSigma(LogGaussianRWParamSD):
     """A Gaussian random walk on the log scale where only the standard deviation is inferred."""
@@ -220,11 +252,14 @@ class SampleLogScale(_ExtendParam):
     def log_prior_jacobian(self, value):
         natural_value = np.exp(value)
         log_prior = super().log_prior_jacobian(natural_value)
-        log_jacobian = value
-        return log_prior + log_jacobian
+        log_jacobian = sum(value)
+        return log_prior + log_jacobian#
+    
+    def value_to_sample(self, value):
+        return super().value_to_sample(np.log(value))
 
-    def sample_to_value(self, value):
-        return super().sample_to_value(np.exp(value))
+    def sample_to_value(self, sample):
+        return super().sample_to_value(np.exp(sample))
 
     def draw_from_prior(self, random_state=None):
         return np.log(super().draw_from_prior(random_state))
@@ -238,8 +273,11 @@ class SampleLogitScale(_ExtendParam):
         log_jacobian = sum(value - 2 * np.log(np.exp(value) + 1))
         return log_prior + log_jacobian
 
-    def sample_to_value(self, value):
-        return super().sample_to_value(expit(value))
+    def sample_to_value(self, sample):
+        return super().sample_to_value(expit(sample))
+
+    def value_to_sample(self, value):
+        return super().sample_to_value(logit(value))
 
     def draw_from_prior(self, random_state=None):
         return logit(super().draw_from_prior(random_state))
@@ -265,6 +303,9 @@ class MatrixSusceptibleChildren(_ExtendParam):
         adults = np.broadcast_to(1, (self._n_strata - self._n_children_strata, self._n_strata))
         return np.vstack([children, adults])
 
-    def sample_to_value(self, value):
-        _value = super().sample_to_value(value)
-        return self._value_to_matrix(_value)
+    def sample_to_value(self, sample):
+        value = super().sample_to_value(sample)
+        return self._value_to_matrix(value)
+    
+    def value_to_sample(self, value):
+        raise NotImplementedError()
