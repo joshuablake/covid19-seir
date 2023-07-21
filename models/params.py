@@ -3,7 +3,14 @@ from scipy import stats
 from scipy.special import expit, logit
 
 class VectorParam(object):
+    """Parameter of arbitrary length and prior, sampled on the natural scale."""
     def __init__(self, length, prior):
+        """Main constructor
+        Args:
+            length (int): Length of the parameter vector
+            prior (scipy.stats.distribution): Prior distribution for the parameter.
+              Must have a `logpdf` method which returns a numpy array.
+        """
         self._length = length
         self._prior = prior
 
@@ -20,7 +27,15 @@ class VectorParam(object):
         raise NotImplementedError
 
 class VectorParamMultiplePriors(VectorParam):
+    """Parameter with a different prior for each element of the vector."""
     def __init__(self, length, prior):
+        """Main constructor
+        Args:
+            length (int): Length of the parameter vector
+            prior (list of scipy.stats.distribution): Prior distribution for each element of the parameter.
+              Each element must have a `logpdf` method which returns a numpy array.
+              Must be of length `length`.
+        """
         assert len(prior) == length
         super().__init__(length, prior)
 
@@ -31,6 +46,7 @@ class VectorParamMultiplePriors(VectorParam):
         return np.array([self._prior[i].rvs(1, random_state=random_state) for i in range(self._length)]).flatten()
 
 class Param(VectorParam):
+    """"A scalar parameter with an arbitrary prior distribution."""
     def __init__(self, prior):
         super().__init__(1, prior)
 
@@ -38,6 +54,7 @@ class Param(VectorParam):
         return self._prior.rvs(1, random_state=random_state)
 
 class FixedParam(Param):
+    """A parameter with a fixed value, i.e. is not sampled by MCMC."""
     def __init__(self, value):
         self._value = value
 
@@ -61,12 +78,28 @@ class ParamTransformAfterPrior(Param):
     def sample_to_value(self, value):
         return self._transformation(value)
 
-class ExpAfterPrior(ParamTransformAfterPrior):
+class ExpAfterPrior(_ParamTransformAfterPrior):
+    """"A parameter which has its prior on the log scale, but is used by the model on the natural scale."""
     def __init__(self, prior):
         super().__init__(prior, np.exp)
 
 class LogGaussianRWParamSD(Param):
+    """A Gaussian random walk on the log scale.
+    
+    The following model, with T being the length of the walk.
+    .. math::
+        \\log(X_{t}) \\sum N(\\log(X_{t-1}), \\sigma^2)
+
+    The prior for sigma is specified by the user, and $X_0$ is fixed at 0 but not included.
+    Sampling is of the incremements, which are distributed as $N(0, \\sigma^2)$.
+    """
     def __init__(self, sd_param, walk_length=None):
+        """Main constructor
+        
+        Args:
+            sd_param (Param): Parameter for the standard deviation of the increments.
+            walk_length (int): Length of the walk.
+        """
         self.sd_param = sd_param
         self.walk_length = walk_length
         self.sd_len = len(sd_param)
@@ -93,11 +126,19 @@ class LogGaussianRWParamSD(Param):
         return np.insert(log_walk_increments, 0, sd_params)
 
 class LogGaussianRW(LogGaussianRWParamSD):
+    """Convenience class for LogGaussianRWParamSD to be called with a prior rather than a parameter."""
     def __init__(self, sd_prior, walk_length=None):
+        """Main constructor
+        
+        Args:
+            sd_prior (scipy.stats.distribution): Prior for the standard deviation of the increments.
+            walk_length (int): Length of the walk.
+        """
         sd_param = Param(sd_prior)
         super().__init__(sd_param, walk_length)
 
 class LogGaussianRWNonCentred(LogGaussianRWParamSD):
+    """Extension to LogGaussianRWParamSD which samples the using the non-centred parameterisation."""
     def __init__(self, sd_prior, walk_length=None, sample_log_scale=False):
         if sample_log_scale:
             sd_param = SampleLogScale(Param(sd_prior))
@@ -124,8 +165,8 @@ class LogGaussianRWNonCentred(LogGaussianRWParamSD):
         log_walk_increments = stats.norm.rvs(size=self.walk_length, random_state=random_state)
         return np.insert(log_walk_increments, 0, sd_params)
 
-# Infer only sigma (epsilons known)
 class LogGaussianRWNonCentredInferSigma(LogGaussianRWParamSD):
+    """A Gaussian random walk on the log scale where only the standard deviation is inferred."""
     def __init__(self, sd_prior, log_walk_increments, sample_log_scale=False):
         self.log_walk_increments = log_walk_increments
         if sample_log_scale:
@@ -149,12 +190,17 @@ class LogGaussianRWNonCentredInferSigma(LogGaussianRWParamSD):
         return len(self.sd_param)
 
 class LogGaussianRWFixedSD(LogGaussianRWParamSD):
+    """A Gaussian random walk on the log scale where the standard deviation is known."""
     def __init__(self, sd_prior, walk_length=None):
         sd_param = FixedParam(sd_prior)
         super().__init__(sd_param, walk_length)
 
 class _ExtendParam(Param):
     def __init__(self, param):
+        """
+        Args:
+            param (Param): Parameter to be modified.
+        """
         self._param = param
 
     def __len__(self):
@@ -170,6 +216,7 @@ class _ExtendParam(Param):
         return self._param.draw_from_prior(random_state)
 
 class SampleLogScale(_ExtendParam):
+    """Sample a parameter on the log scale, with the prior on the natural scale."""
     def log_prior_jacobian(self, value):
         natural_value = np.exp(value)
         log_prior = super().log_prior_jacobian(natural_value)
@@ -184,6 +231,7 @@ class SampleLogScale(_ExtendParam):
 
 
 class SampleLogitScale(_ExtendParam):
+    """Sample a parameter on the logit scale, with the prior on the natural scale."""
     def log_prior_jacobian(self, value):
         natural_value = expit(value)
         log_prior = super().log_prior_jacobian(natural_value)
@@ -199,7 +247,14 @@ class SampleLogitScale(_ExtendParam):
 
 
 class MatrixSusceptibleChildren(_ExtendParam):
+    """A square matrix where the first few rows are a parameter and the rest are 1."""
     def __init__(self, param, n_strata, n_children_strata):
+        """
+        Args:
+            param (Param): Parameter for the first rows.
+            n_strata (int): Size of the matrix.
+            n_children_strata (int): Number of rows which are the parameter value.
+        """
         assert n_strata > n_children_strata
         super().__init__(param)
         self._n_strata = n_strata
