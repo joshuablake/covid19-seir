@@ -39,6 +39,7 @@ class VectorParamMultiplePriors(VectorParam):
               Each element must have a `logpdf` method which returns a numpy array.
               Must be of length `length`.
         """
+        assert length > 1
         assert len(prior) == length
         super().__init__(length, prior)
 
@@ -252,7 +253,7 @@ class SampleLogScale(_ExtendParam):
     def log_prior_jacobian(self, value):
         natural_value = np.exp(value)
         log_prior = super().log_prior_jacobian(natural_value)
-        log_jacobian = sum(value)
+        log_jacobian = value.sum()
         return log_prior + log_jacobian#
     
     def value_to_sample(self, value):
@@ -270,7 +271,7 @@ class SampleLogitScale(_ExtendParam):
     def log_prior_jacobian(self, value):
         natural_value = expit(value)
         log_prior = super().log_prior_jacobian(natural_value)
-        log_jacobian = sum(value - 2 * np.log(np.exp(value) + 1))
+        log_jacobian = (value - 2 * np.log(np.exp(value) + 1)).sum()
         return log_prior + log_jacobian
 
     def sample_to_value(self, sample):

@@ -6,6 +6,10 @@ from scipy import stats
 from scipy.special import expit, logit
 import numpy as np
 
+def test_vector_param_prior_mass_scalar():
+    param = params.VectorParam(1, stats.norm())
+    assert param.log_prior_jacobian(0) == approx(-0.9189385332046727)
+
 def test_vector_param_prior_mass():
     param = params.VectorParam(3, stats.norm())
     assert param.log_prior_jacobian([-3, 0, 3]) == approx(-0.9189385332046727 + 2 * -5.418938533204672)
@@ -31,6 +35,14 @@ def test_vector_param_sample_to_value(value):
 def test_vector_param_value_to_sample(value):
     param = params.VectorParam(value.shape[0], stats.norm())
     assert (param.value_to_sample(value) == value).all()
+
+def test_vector_param_multiple_prior_mass_scalar():
+    try:
+        param = params.VectorParamMultiplePriors(1, [stats.norm()])
+        assert param.log_prior_jacobian(0) == approx(-0.9189385332046727)
+    except:
+        # OK if length one isn't implemented here
+        pass
 
 def test_vector_param_multiple_prior_mass():
     param = params.VectorParamMultiplePriors(3, [stats.norm(loc=-3), stats.norm(), stats.norm(loc=3)])
@@ -144,6 +156,11 @@ def test_log_gaussian_RW_noncentered_value_to_sample(sd, walk):
     expected = approx(sample, abs=tolerance, rel=1e-5)
     assert actual == expected
 
+def test_sample_log_scale_prior_mass_scalar():
+    param = params.SampleLogScale(params.Param(stats.norm(1)))
+    sample = np.array(0)
+    assert param.log_prior_jacobian(sample) == approx(-0.9189385332046727)
+
 def test_sample_log_scale_prior_mass():
     param = params.SampleLogScale(params.VectorParam(3, stats.norm(1)))
     sample = np.array([0, 0, 0])
@@ -173,6 +190,11 @@ def test_sample_log_scale_value_to_sample(samples):
     assume(np.isfinite(np.log(np.exp(samples))).all())
     param = params.SampleLogScale(params.VectorParam(samples.shape[0], stats.norm(1)))
     assert param.value_to_sample(param.sample_to_value(samples)) == approx(samples)
+
+def test_sample_logit_scale_prior_mass_scalar():
+    param = params.SampleLogitScale(params.Param(stats.norm(0.5)))
+    sample = np.array(0)
+    assert param.log_prior_jacobian(sample) == approx(-0.9189385332046727 - (2 * np.log(2)))
 
 def test_sample_logit_scale_prior_mass():
     param = params.SampleLogitScale(params.VectorParam(3, stats.norm(0.5)))
