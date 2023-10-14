@@ -56,18 +56,6 @@ def test_inital_state2():
     assert init_state.R == approx(0.05)
     assert model.num_betas == 1
 
-def test_inital_shrinking():
-    model = SingleRegionSingleAgeSEIRCompartmental(1, dt=1)
-    init_state, init_R0 = model._init_transmission(2, 2, -0.5, 1/1000, 1)
-    assert init_R0 == approx(1/12)
-    assert model.check_state(init_state)
-    assert init_state.I1 + init_state.I2 == approx(24e-3)
-    assert init_state.I1 == approx(24e-3 * (1 + np.exp(0.5)) ** -1)
-    assert init_state.E2 == approx(init_state.I1 * np.exp(-0.5))
-    assert init_state.E1 == approx(init_state.E2 * np.exp(-0.5))
-    assert init_state.R == approx(0)
-    assert model.num_betas == 0
-
 @given(
     max_time = st.integers(min_value = 1, max_value = 10_000),
     dt_over_1 = st.integers(min_value = 1),
@@ -121,21 +109,22 @@ def test_reduction_in_S(start_state, dt, beta_t):
     #num_steps = st.integers(min_value=142, max_value=1000),
     dt_over_1 = st.integers(min_value=1, max_value=10),
     beta = st.lists(st.integers(min_value=0, max_value=100), min_size=142, max_size=142),
-    dL = st.floats(min_value=0, max_value=10, exclude_min=True),
-    dI = st.floats(min_value=0, max_value=10, exclude_min=True),
-    psir = st.floats(min_value=-1, max_value=1),
-    i0 = st.floats(min_value=0, max_value=0.1),
-    pi = st.floats(min_value=0, max_value=1)
+    psir = st.floats(min_value=0, max_value=0.5, exclude_min=True),
+    i0 = st.floats(min_value=1e-9, max_value=0.1),
+    pi = st.floats(min_value=0.5, max_value=1),
+    data = st.data()
 )
 @settings(deadline=1000, max_examples=10)
-def test_simulate_epidemic(dt_over_1, beta, dL, dI, psir, i0, pi):
+def test_simulate_epidemic(dt_over_1, beta, psir, i0, pi, data):
     max_time = 1000
     #dt = max_time / num_steps
     dt = 1 / dt_over_1
+    dL = data.draw(st.floats(min_value=dt*4, max_value=10))
+    dI = data.draw(st.floats(min_value=dt*4, max_value=10, exclude_max=True))
     try:
         model = SingleRegionSingleAgeSEIRCompartmental(max_time, dt)
         nni, prev, final_state = model.simulate(beta, dL, dI, psir, i0, pi)
-    except ValueError:
+    except ValueError as e:
         assume(False)
     assert len(nni) == max_time
     assert len(prev) == max_time

@@ -57,13 +57,10 @@ class BaseModel(object):
                 # Avoid overflows
                 abs(psir) <= 10 and
                 # Positive number of initial exposed and infecteds
-                i0 >= 0 and
-                (psir >= 0 or dL < 2/(1-np.exp(psir*self._dt))) and
-                (psir >= 0 or dI < 2/(1-np.exp(psir*self._dt))) and
+                i0 > 0 and
+                psir > 0 and
                 # pi is a proportion
-                (0 <= pi).all() and (pi <= 1).all() and
-                # Require R0 > 0
-                (psir >= 0 or dI * -psir < 2)
+                (0 <= pi).all() and (pi <= 1).all()
             ):
             return
         raise ValueError("Impossible values for model")
@@ -257,16 +254,15 @@ class SingleRegionStratifiedSEIRCompartmental(BaseModel):
         sigma = 2./dL
         gamma = 2./dI
 
-        alpha = np.exp(psir*self._dt) - 1
-        i1_init = I_init*(1 + (gamma/(alpha + gamma)))**-1
+        i1_init = I_init*(1 + (gamma/(psir + gamma)))**-1
         i2_init = I_init - i1_init
-        e2_init = i1_init*(alpha + gamma)/sigma
-        e1_init = e2_init*(alpha + sigma)/sigma
+        e2_init = i1_init*(psir + gamma)/sigma
+        e1_init = e2_init*(psir + sigma)/sigma
         r_init = 1 - pi
         s_init = 1 - i1_init - i2_init - e1_init - e2_init - r_init
         if np.logical_and(s_init < 0, np.logical_not(np.isclose(s_init, 0))).any():
             raise ValueError("Values of pi and i0 imply more than entire population")
-        p_init = self._calculate_initial_prev_state(e1_init, sigma, alpha)
+        p_init = self._calculate_initial_prev_state(e1_init, sigma, psir)
 
         init_state = np.vstack((s_init, e1_init, e2_init, i1_init, i2_init, r_init, p_init))
         assert self.check_state(init_state)
@@ -274,9 +270,12 @@ class SingleRegionStratifiedSEIRCompartmental(BaseModel):
 
     def _calculate_initial_prev_state(self, e1_init, sigma, psir):
         p_init = np.empty((P_STATES, self.num_strata))
-        p_init[0] = (sigma + psir) / (1 + -P_TRANSITIONS[1, 1]) * e1_init
+        p_init[0] = (sigma + psir) / (psir + -P_TRANSITIONS[1, 1]) * e1_init
+
+        P_OUT = -np.diag(P_TRANSITIONS)
+        P_IN = P_TRANSITIONS @ np.ones(P_STATES) + P_OUT
         for i in range(1, P_STATES):
-            p_init[i] = (P_TRANSITIONS[i, i-1] / -P_TRANSITIONS[i, i]) * p_init[i - 1]
+            p_init[i] = (P_IN[i] / (psir + P_OUT[i])) * p_init[i - 1]
         return p_init
 
     def _calculate_gradient(self, start_state, beta_t, dL, dI):
