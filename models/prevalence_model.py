@@ -2,16 +2,17 @@ from collections import namedtuple
 import numpy as np
 from scipy.linalg import block_diag
 
-P_STATES = 7
+P_STATES = 4
+KAPPA_Y = 0.82
+KAPPA_X1 = 0.126
+KAPPA_X2 = 0.0223
+P_X = 0.00973
 # Transition rates between P states
 P_TRANSITIONS = np.array([
-    -1/3,   0,                      0,                      0,                      0,                      0,                      0,
-    1/3,    -0.2279314474033871,    0,                      0,                      0,                      0,                      0,
-    0,      0.2279314474033871,     -0.2279314474033871,    0,                      0,                      0,                      0,
-    0,      0,                      0.2279314474033871,     -0.2279314474033871,    0,                      0,                      0,
-    0,      0,                      0,                      0.2279314474033871,     -0.2279314474033871,    0,                      0,
-    0,      0,                      0,                      0,                      0.2279314474033871,     -1.1287836677440286,    0,
-    0,      0,                      0,                      0,                      0,                      3.1437857603953896e-4,  -0.013204089629658078
+    -1/3,   0,           0,                 0,
+    1/3,    -KAPPA_Y,    0,                 0,
+    0,      KAPPA_Y,     -KAPPA_X1,         0,
+    0,      0,           P_X * KAPPA_X1,    -KAPPA_X2,
 ]).reshape((P_STATES, P_STATES))
 # Matrix to multiply current P to give new P
 P_STEP = np.eye(P_STATES) + P_TRANSITIONS
