@@ -254,7 +254,7 @@ class SampleLogScale(_ExtendParam):
         natural_value = np.exp(value)
         log_prior = super().log_prior_jacobian(natural_value)
         log_jacobian = value.sum()
-        return log_prior + log_jacobian#
+        return log_prior + log_jacobian
     
     def value_to_sample(self, value):
         return super().value_to_sample(np.log(value))
