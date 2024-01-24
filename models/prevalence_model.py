@@ -3,7 +3,7 @@ import numpy as np
 from scipy.linalg import block_diag
 
 P_STATES = 4
-KAPPA_Y = 0.82
+KAPPA_Y = 0.082
 KAPPA_X1 = 0.126
 KAPPA_X2 = 0.0223
 P_X = 0.00973
