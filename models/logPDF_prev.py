@@ -127,12 +127,12 @@ class LogPosteriorBetaBinomial(LogPosteriorStratifiedRegion):
         log_lik = self._log_lik(result, theta)
         return log_lik + log_prior
 
-    def simulate(self, parameters, include_log_prior=False, return_theta=False):
+    def simulate(self, parameters, include_log_prior=False, return_theta=False, include_new_pcr_pos=False):
         assert len(parameters) == self.n_params
         log_prior, param_values = self.param_array_to_dict(parameters)
         theta = param_values["theta"]
         del param_values["theta"]
-        result = self._forward_model.simulate(**param_values)
+        result = self._forward_model.simulate(include_new_pcr_pos=include_new_pcr_pos, **param_values)
         return_val = [result]
         if include_log_prior:
             return_val.append(log_prior)

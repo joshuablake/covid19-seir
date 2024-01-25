@@ -351,7 +351,7 @@ class SingleRegionStratifiedSEIRCompartmental(BaseModel):
         prevalence: a (max_time, num_strata) array of number of prevalence on each day
         final_state: the state at the end of the epidemic
     """
-    def simulate(self, beta, dL, dI, psir, i0, pi, matrix_modifiers):
+    def simulate(self, beta, dL, dI, psir, i0, pi, matrix_modifiers, include_new_pcr_pos=False):
         assert len(matrix_modifiers.shape) == 2
         assert matrix_modifiers.shape[0] == matrix_modifiers.shape[1] == self.num_strata
         assert len(beta) == self.num_betas
@@ -361,6 +361,7 @@ class SingleRegionStratifiedSEIRCompartmental(BaseModel):
 
         nni = np.zeros((self.max_time, self.num_strata))
         prev = np.zeros((self.max_time, self.num_strata))
+        new_pcr_pos = np.zeros((self.max_time, self.num_strata))
         prev_state, matrix_scaling = self._init_transmission(dL, dI, psir, i0, pi, matrices[0])
         linear_transitions = self._calc_linear_transition_matrix(dL, dI)
         cur_state = prev_state
@@ -376,8 +377,14 @@ class SingleRegionStratifiedSEIRCompartmental(BaseModel):
                 prev_day = day_num
             B_t = matrices[self._beta_of_step[i]]
             cur_state = self._single_step(cur_state, B_t, linear_transitions)
-            nni[day_num] += self.get_compartment(prev_state, "S") - self.get_compartment(cur_state, "S")
+            nni_in_timestep = self.get_compartment(prev_state, "S") - self.get_compartment(cur_state, "S")
+            nni[day_num] += nni_in_timestep
+            # New PCR positive = number leaving P0 = enterance to P0 - net change in P0 = nni - net change in P0
+            net_change_P0_compartment = self.get_compartment(cur_state, "P0") - self.get_compartment(prev_state, "P0")
+            new_pcr_pos[day_num] += nni_in_timestep - net_change_P0_compartment
             # Build up average day-by-day without assuming number of steps per day
             prev[day_num] = (sum(cur_state[-(P_STATES-1):]) + prev[day_num] * (steps_since_day_change - 1)) / steps_since_day_change
             prev_state = cur_state
+        if include_new_pcr_pos:
+            return nni, prev, cur_state, new_pcr_pos
         return nni, prev, cur_state
