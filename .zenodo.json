@@ -1,0 +1,12 @@
+{
+  "title": "covid19-seir: an age-structured SEIR model for SARS-CoV-2 RT-PCR prevalence data",
+  "upload_type": "software",
+  "description": "<p>Python implementation of an age-structured, regional SEIR transmission model for SARS-CoV-2 with an observation model for RT-PCR positivity, and an adaptive random-walk Metropolis-Hastings sampler for fitting it to prevalence survey data. This version was used for the analyses of the ONS Coronavirus (COVID-19) Infection Survey in Blake et al., 'The added value of randomly sampled prevalence surveys to estimate infection incidence and transmission'.</p>",
+  "creators": [
+    {"name": "Blake, Joshua", "affiliation": "MRC Biostatistics Unit, University of Cambridge"},
+    {"name": "Ghosh, Sanmitra", "affiliation": "MRC Biostatistics Unit, University of Cambridge"}
+  ],
+  "license": "MIT",
+  "keywords": ["SARS-CoV-2", "COVID-19", "SEIR model", "epidemic modelling", "MCMC", "prevalence"],
+  "access_right": "open"
+}
