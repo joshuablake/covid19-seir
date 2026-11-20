@@ -4,6 +4,9 @@ from numpy.core.numeric import Inf
 import pandas as pd
 import scipy.stats as stats
 
+# Smallest overdispersion for which the beta-binomial log pmf is reliable
+BETABINOM_THETA_MIN = 1e-11
+
 MODEL_PARAMS = {
     "psir": params.Param(stats.gamma(a = 31.36, scale = 1/224)),
     "i0": params.ExpAfterPrior(stats.norm(-5, 2)),
@@ -145,6 +148,11 @@ class LogPosteriorBetaBinomial(LogPosteriorStratifiedRegion):
         if not np.isscalar(theta):
             assert len(theta) == 1
             theta = theta[0]
+        # scipy's betabinom.logpmf loses all precision for alpha, beta ~ 1/theta
+        # when theta < ~1e-12 (returns arbitrary, even huge positive, values),
+        # which can trap MCMC chains. Exclude that region (negligible prior mass).
+        if theta < BETABINOM_THETA_MIN:
+            return -Inf
         n = self._tests
         k = self._positives
         pi = results[1][self._results_index]
