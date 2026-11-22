@@ -278,7 +278,7 @@ class SampleLogitScale(_ExtendParam):
         return super().sample_to_value(expit(sample))
 
     def value_to_sample(self, value):
-        return super().sample_to_value(logit(value))
+        return super().value_to_sample(logit(value))
 
     def draw_from_prior(self, random_state=None):
         return logit(super().draw_from_prior(random_state))

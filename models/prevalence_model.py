@@ -16,6 +16,8 @@ P_TRANSITIONS = np.array([
 ]).reshape((P_STATES, P_STATES))
 # Matrix to multiply current P to give new P
 P_STEP = np.eye(P_STATES) + P_TRANSITIONS
+# Exit rate from each P state
+P_OUT = -np.diag(P_TRANSITIONS)
 
 SEIR_state = namedtuple(
     "SEIR_state",
@@ -59,7 +61,12 @@ class BaseModel(object):
                 abs(psir) <= 10 and
                 # Positive number of initial exposed and infecteds
                 i0 > 0 and
-                psir > 0 and
+                # Growth rate must keep the steady-state initial state
+                # positive: psir + (exit rate) > 0 for every compartment.
+                # The binding constraint is psir > -KAPPA_X2 (P3 exit rate).
+                psir + P_OUT.min() > 0 and
+                psir + 2. / dL > 0 and
+                psir + 2. / dI > 0 and
                 # pi is a proportion
                 (0 <= pi).all() and (pi <= 1).all()
             ):
@@ -271,9 +278,11 @@ class SingleRegionStratifiedSEIRCompartmental(BaseModel):
 
     def _calculate_initial_prev_state(self, e1_init, sigma, psir):
         p_init = np.empty((P_STATES, self.num_strata))
-        p_init[0] = (sigma + psir) / (psir + -P_TRANSITIONS[1, 1]) * e1_init
+        # Steady state of P0 under growth at rate psir: inflow (sigma + psir) * e1
+        # divided by (psir + omega_0), where omega_0 = P_OUT[0] = 1/3 is the
+        # exit rate from P0 (previously used P_OUT[1] = KAPPA_Y in error)
+        p_init[0] = (sigma + psir) / (psir + P_OUT[0]) * e1_init
 
-        P_OUT = -np.diag(P_TRANSITIONS)
         P_IN = P_TRANSITIONS @ np.ones(P_STATES) + P_OUT
         for i in range(1, P_STATES):
             p_init[i] = (P_IN[i] / (psir + P_OUT[i])) * p_init[i - 1]
